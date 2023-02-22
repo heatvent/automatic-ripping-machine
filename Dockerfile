@@ -1,6 +1,6 @@
 ###########################################################
 # setup default directories and configs
-FROM 1337-server-re-add-handbrakecli-source AS base
+FROM 1337server/arm-dependencies:1337-server-re-add-handbrakecli-source AS base
 
 # override at runtime to change makemkv key
 ENV MAKEMKV_APP_KEY=""
