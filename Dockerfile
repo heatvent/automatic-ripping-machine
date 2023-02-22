@@ -1,6 +1,6 @@
 ###########################################################
 # setup default directories and configs
-FROM automaticrippingmachine/arm-dependencies:1.0.7 AS base
+FROM 1337-server-re-add-handbrakecli-source AS base
 
 # override at runtime to change makemkv key
 ENV MAKEMKV_APP_KEY=""
