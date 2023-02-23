@@ -54,7 +54,7 @@ def makemkv(logfile, job):
     # Rip bluray
     if (job.config.RIPMETHOD == "backup" or job.config.RIPMETHOD == "backup_dvd") and job.disctype == "bluray":
         # backup method
-        cmd = f'makemkvcon backup --minlength={job.config.MINLENGTH} --decrypt {job.config.MKV_ARGS} ' \
+        cmd = f'makemkvcon backup --decrypt {job.config.MKV_ARGS} ' \
               f'-r disc:{mdisc.strip()} {shlex.quote(rawpath)}>> {logfile}'
         logging.info("Backup up disc")
         run_makemkv(cmd)
