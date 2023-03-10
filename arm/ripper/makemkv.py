@@ -59,6 +59,13 @@ def makemkv(logfile, job):
               f'-r disc:{mdisc.strip()} {shlex.quote(rawpath)}'
         logging.info("Backup up disc")
         run_makemkv(cmd, logfile)
+        
+    # Rip longest title
+    elif job.config.RIPMETHOD == "longest" and job.disctype == "bluray":
+
+       get_track_info(mdisc, job)
+       process_longest_title(job, logfile, rawpath)        
+        
     # Rip DVD
     elif job.config.RIPMETHOD == "mkv" or job.disctype == "dvd":
         get_track_info(mdisc, job)
@@ -77,6 +84,40 @@ def makemkv(logfile, job):
     logging.info(f"Exiting MakeMKV processing with return value of: {rawpath}")
     return rawpath
 
+def process_longest_title(job, logfile, rawpath):
+    """
+    For processing single titles from MakeMKV one at a time and rip only the longest title
+    :param job: job object
+    :param str logfile: path of logfile
+    :param str rawpath:
+    :return:
+    """
+
+    # Set longest_durration to zero
+    longest_duration = int(0)
+
+    # process each track one track at a time to determine longest track length
+    for track in job.tracks:
+        if track.length > longest_duration:
+            # set new longest duration and title number
+            longest_duration = track.length
+            longest_title = track.track_number
+            logging.info(f"Title #{track.track_number} of {job.no_of_titles}. Length ({track.length}) "
+                         f"is currently the longest title.")
+        else:
+            # too short
+            logging.info(f"Title #{track.track_number} of {job.no_of_titles}. Length ({track.length}) "
+                         f"is less than the current longest title ... skipping.")
+
+    logging.info(f"Title #{longest_title} of {job.no_of_titles} is the longest track. "
+                 f"Length is {longest_duration} seconds.")
+    filepathname = os.path.join(rawpath, track.filename)
+    logging.info(f"Ripping title {longest_title} to {shlex.quote(filepathname)}")
+
+    cmd = f'makemkvcon mkv {job.config.MKV_ARGS} -r --progress=-stdout --messages=-stdout ' \
+          f'dev:{job.devpath} {longest_title} {shlex.quote(rawpath)} '
+    # Possibly update db to say track was ripped
+    run_makemkv(cmd, logfile)
 
 def process_single_tracks(job, logfile, rawpath):
     """
