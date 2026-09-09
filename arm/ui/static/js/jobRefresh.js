@@ -148,12 +148,11 @@ function updateContents(item, _job, keyString, itemContents) {
         console.log(item)
         return false;
     }
-    if (item[0].innerText.includes(itemContents)) {
-        //console.log("nothing to do - values are current")
-    } else {
-        item[0].innerHTML = `<b> ${keyString}: </b>${itemContents}`;
-        console.log(`${item[0].innerText} - <b>${keyString}: </b>${itemContents}`)
-        console.log(item[0].innerText.includes(itemContents))
+    const shown = (itemContents === undefined || itemContents === null ||
+        itemContents === "None" || itemContents === "null") ? "" : String(itemContents);
+    const html = `<b>${keyString}: </b>${shown}`;
+    if (item[0].innerHTML.replace(/\s+/g, " ").trim() !== html.replace(/\s+/g, " ").trim()) {
+        item[0].innerHTML = html;
     }
     return true;
 }
@@ -167,13 +166,13 @@ function updateJobItem(oldJob, job) {
     const cardHeader = $(`#jobId${job.job_id}_header`);
     const posterUrl = $(`#jobId${job.job_id}_poster_url`);
     const status = $(`#jobId${job.job_id}_status`);
-    // Update card header ( Title (Year) )
-    if (cardHeader[0].innerText !== `${job.title} (${job.year})`) {
-        cardHeader[0].innerText = `${job.title} (${job.year})`;
+    const headerText = (typeof titleManual === "function") ? titleManual(job) : `${job.title} (${job.year})`;
+    if (cardHeader[0].innerText !== headerText) {
+        cardHeader[0].innerText = headerText;
     }
-    // Update card poster image
-    if (job.poster_url !== posterUrl[0].src && job.poster_url !== "None" && job.poster_url !== "N/A") {
-        posterUrl[0].src = job.poster_url;
+    const nextPoster = (typeof jobPosterSrc === "function") ? jobPosterSrc(job) : job.poster_url;
+    if (posterUrl[0] && !posterUrl[0].src.includes(nextPoster) && posterUrl[0].src !== nextPoster) {
+        posterUrl[0].src = nextPoster;
     }
     // Update job status image
     if (job.status !== status[0].title) {
@@ -184,7 +183,8 @@ function updateJobItem(oldJob, job) {
     // Go through and update job values as needed
     updateContents($(`#jobId${job.job_id}_year`), job, "Year", job.year);
     updateContents($(`#jobId${job.job_id}_devpath`), job, "Device", job.devpath);
-    updateContents($(`#jobId${job.job_id}_video_type`), job, "Type", job.video_type);
+    updateContents($(`#jobId${job.job_id}_video_type`), job, "Type",
+        (typeof jobTypeLabel === "function") ? jobTypeLabel(job) : job.video_type);
     updateProgress(job, oldJob);
     updateContents($(`#jobId${job.job_id}_RIPMETHOD`), job, "Rip Method", job.config.RIPMETHOD);
     updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", job.config.MAINFEATURE);
@@ -208,14 +208,14 @@ function removeJobItem(job) {
 function refreshJobsComplete() {
     // Loop through all active jobs and remove any that have finished
     // Notes: This breaks when arm child servers are added
-    $.each(activeJobs, function (index, job) {
-        if (typeof (job) !== "undefined" && !job.active) {
+    for (let i = activeJobs.length - 1; i >= 0; i--) {
+        const job = activeJobs[i];
+        if (typeof job !== "undefined" && !job.active) {
             console.log("Job isn't active:" + job.job_id.split("_")[1]);
-            console.log(job)
             removeJobItem(job);
-            activeJobs.splice(index, 1);
+            activeJobs.splice(i, 1);
         }
-    });
+    }
 
     $("#joblist .col-md-4").sort(function (a, b) {
         if (a.id === b.id) {

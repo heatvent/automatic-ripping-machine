@@ -78,9 +78,37 @@ function transcodingCheck(job) {
     return x;
 }
 
+function isMusicJob(job) {
+    return job.disctype === "music" || job.video_type === "Music";
+}
+
+function jobTypeLabel(job) {
+    if (isMusicJob(job)) {
+        return "Music";
+    }
+    return job.video_type;
+}
+
+function hasPosterUrl(job) {
+    return Boolean(job.poster_url) &&
+        job.poster_url !== "None" &&
+        job.poster_url !== "N/A" &&
+        job.poster_url !== "null";
+}
+
+function jobPosterSrc(job) {
+    if (hasPosterUrl(job)) {
+        return job.poster_url;
+    }
+    if (isMusicJob(job)) {
+        return "/static/img/music.png";
+    }
+    return "/static/img/none.png";
+}
+
 function musicCheck(job, idsplit) {
     let x = "";
-    if (job.video_type !== "Music") {
+    if (!isMusicJob(job)) {
         x = `<a href="titlesearch?job_id=${idsplit[1]}" class="btn btn-primary">Title Search</a>
              <a href="customTitle?job_id=${idsplit[1]}" class="btn btn-primary">Custom Title</a>
              <a href="changeparams?config_id=${idsplit[1]}" class="btn btn-primary">Edit Settings</a>`;
@@ -89,36 +117,20 @@ function musicCheck(job, idsplit) {
 }
 
 function posterCheck(job) {
-    let x;
-    let image;
-    if (job.poster_url !== "None" && job.poster_url !== "N/A") {
-        x = `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${job.poster_url}" width="240px" class="img-thumbnail">`;
-    } else {
-        if (job.video_type === "Music") {
-            image = 'music.png';
-        } else {
-            image = 'none.png';
-        }
-        x = `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="/static/img/${image}" width="240px" class="img-thumbnail">`;
-    }
-    return x;
+    return `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${jobPosterSrc(job)}" width="240px" class="img-thumbnail">`;
 }
 
 function titleManual(job) {
-    let x;
-    if (job.title_manual !== "None") {
-        x = `${job.title_manual}(${job.year})`;
-    } else {
-        x = `${job.title}(${job.year})`;
-    }
-    return x;
+    const title = (job.title_manual && job.title_manual !== "None") ? job.title_manual : job.title;
+    const year = (job.year && job.year !== "None") ? job.year : "";
+    return year ? `${title} (${year})` : `${title}`;
 }
 
 function buildMiddleSection(job) {
     let x;
     x = "<div class=\"col-lg-4\"><div class=\"card-body px-1 py-1\">";
-    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year}</div>`;
-    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${job.video_type}</div>`;
+    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year && job.year !== "None" ? job.year : ""}</div>`;
+    x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${jobTypeLabel(job)}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${job.devpath}</div>`;
     x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" 
                                src="static/img/${job.status}.png" height="20px" alt="${job.status}" title="${job.status}"></div>`;

@@ -848,8 +848,17 @@ def job_dupe_check(job):
     if job.label is None:
         logging.info("Disc title 'None' not searched in database")
         return False
+    if job.disctype in (None, "unknown"):
+        logging.info("Disc type is unknown; skipping previous-rip metadata copy")
+        return False
     else:
-        previous_rips = Job.query.filter_by(label=job.label, status=JobState.SUCCESS.value)
+        # Same label can exist on a CD and a Blu-ray; only reuse metadata
+        # from a successful job of the same disc type.
+        previous_rips = Job.query.filter_by(
+            label=job.label,
+            status=JobState.SUCCESS.value,
+            disctype=job.disctype,
+        )
         results = {}
         i = 0
         for j in previous_rips:
