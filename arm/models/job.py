@@ -207,6 +207,11 @@ class Job(db.Model):
                 self.disctype = "dvd"
             elif key == "ID_CDROM_MEDIA_TRACK_COUNT_AUDIO":
                 self.disctype = "music"
+            elif key in ("ID_CDROM_MEDIA_CD", "ID_CDROM_MEDIA_CD_R", "ID_CDROM_MEDIA_CD_RW"):
+                # udev reports recordable audio discs as CD_R/CD_RW, not MEDIA_CD.
+                # Do not override a more specific type already found (dvd/bluray/data).
+                if value == "1" and self.disctype == "unknown":
+                    self.disctype = "music"
             else:
                 continue
 
