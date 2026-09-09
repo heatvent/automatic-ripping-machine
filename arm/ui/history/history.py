@@ -45,5 +45,27 @@ def history():
 
     session["page_title"] = "History"
 
+    other_logs = []
+    log_path = cfg.arm_config.get("LOGPATH")
+    if (
+        not isinstance(jobs, dict)
+        and getattr(jobs, "page", 1) == 1
+        and log_path
+        and os.path.isdir(log_path)
+    ):
+        try:
+            job_logs = {
+                name for (name,) in db.session.query(Job.logfile).filter(Job.logfile.isnot(None)).all()
+                if name
+            }
+            other_logs = [
+                entry for entry in ui_utils.get_info(log_path)
+                if entry[0] not in job_logs
+            ]
+            other_logs.sort(key=lambda item: item[0].lower())
+        except (OSError, Exception) as error:  # noqa: BLE001
+            app.logger.error(f"Unable to list log files: {error}")
+
     return render_template('history.html', jobs=jobs.items,
-                           date_format=cfg.arm_config['DATE_FORMAT'], pages=jobs)
+                           date_format=cfg.arm_config['DATE_FORMAT'], pages=jobs,
+                           other_logs=other_logs)

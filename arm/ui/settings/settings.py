@@ -2,6 +2,7 @@
 ARM route blueprint for settings pages
 Covers
 - settings [GET]
+- system [GET]
 - save_settings [POST]
 - save_ui_settings [POST]
 - save_abcde_settings [POST]
@@ -20,6 +21,7 @@ import re
 import subprocess
 from datetime import datetime
 import os
+import time
 
 import sqlalchemy
 
@@ -37,6 +39,28 @@ from arm.models.system_info import SystemInfo
 from arm.models.ui_settings import UISettings
 import arm.config.config as cfg
 from arm.ui.settings import DriveUtils as drive_utils
+from arm.config.config_utils import (
+    BOOLEAN_SETTING_KEYS,
+    ENUM_SETTING_CHOICES,
+    HIDDEN_SETTING_KEYS,
+    is_secret_setting_key,
+    mask_last,
+    yaml_is_true,
+)
+from arm.ui.settings.setting_meta import (
+    INTEGER_SETTING_KEYS,
+    PORT_SETTING_KEYS,
+    SETTING_LABELS,
+    page_setting_groups,
+    setting_label,
+    validate_ripper_form,
+    validate_ui_form,
+)
+from arm.ui.settings.abcde_utils import (
+    abcde_fields_for_ui,
+    apply_abcde_updates,
+    validate_abcde_form,
+)
 from arm.ui.forms import SettingsForm, UiSettingsForm, AbcdeForm, SystemInfoDrives
 from arm.ui.settings.ServerUtil import ServerUtil
 import arm.ripper.utils as ripper_utils
@@ -47,40 +71,48 @@ route_settings = Blueprint('route_settings', __name__,
 REDIRECT_SETTINGS = "route_settings.settings"
 
 
-def mask_last(value, n=4):
-    """
-    Replaces the last `n` characters of a string with asterisks.
-    """
-    if not isinstance(value, str):
-        return value
-    return value[:-n] + '*' * n if len(value) > n else '*' * len(value)
+def redirect_to_settings_tab(tab="drives"):
+    return redirect(url_for(REDIRECT_SETTINGS) + f"#{tab}")
 
 
 def is_read_only(path: os.PathLike) -> bool:
     return not os.access(path, os.W_OK)
 
 
+def _first_form_errors(form):
+    """Flatten WTForms errors to {field: first message}."""
+    errors = {}
+    for key, messages in (form.errors or {}).items():
+        if not messages:
+            continue
+        errors[key] = messages[0]
+    return errors
+
+
 route_settings.add_app_template_filter(mask_last, name='mask_last')
+route_settings.add_app_template_filter(yaml_is_true, name='as_bool')
+route_settings.add_app_template_global(setting_label, name='setting_label')
 
 
-@route_settings.route('/settings')
-@login_required
-def settings():
-    """
-    Page - settings
-    Method - GET
-    Overview - allows the user to update the all configs of A.R.M without
-    needing to open a text editor
-    """
+def redacted_config(settings):
+    """Return a copy of a config dict with secret values masked."""
+    if not isinstance(settings, dict):
+        return settings
+    redacted = dict(settings)
+    for key, value in redacted.items():
+        if value and is_secret_setting_key(key):
+            redacted[key] = mask_last(str(value))
+    return redacted
 
-    # stats for info page
+
+def _system_page_context():
+    """Stats, hardware, and drive data for the System page."""
     failed_rips = Job.query.filter_by(status="fail").count()
     total_rips = Job.query.filter_by().count()
     movies = Job.query.filter_by(video_type="movie").count()
     series = Job.query.filter_by(video_type="series").count()
     cds = Job.query.filter_by(disctype="music").count()
 
-    # Get the current server time and timezone
     server_timezone = os.environ.get("TZ", "Etc/UTC")
     current_time = datetime.now()
     server_datetime = current_time.strftime(cfg.arm_config['DATE_FORMAT'])
@@ -102,56 +134,102 @@ def settings():
              'hw_support': check_hw_transcode_support()
              }
 
-    # ARM UI config
-    armui_cfg = ui_utils.arm_db_cfg()
-
-    # Get system details from Server Info and Config
     server = SystemInfo.query.filter_by(id="1").first()
     serverutil = ServerUtil()
-    arm_path = cfg.arm_config['TRANSCODE_PATH']
-    media_path = cfg.arm_config['COMPLETED_PATH']
-
-    # System Drives (CD/DVD/Blueray drives)
     drive_utils.update_job_status()
     drives = drive_utils.get_drives()
     drive_utils.update_tray_status(drives)
-    form_drive = SystemInfoDrives(request.form)
+
+    return {
+        'stats': stats,
+        'server': server,
+        'serverutil': serverutil,
+        'arm_path': cfg.arm_config['TRANSCODE_PATH'],
+        'media_path': cfg.arm_config['COMPLETED_PATH'],
+        'drives': drives,
+        'form_drive': SystemInfoDrives(request.form),
+    }
+
+
+@route_settings.route('/system')
+@login_required
+def system_page():
+    """Keep /system working; it now opens Settings → System Information."""
+    return redirect_to_settings_tab("sysinfo")
+
+
+@route_settings.route('/settings')
+@login_required
+def settings():
+    """
+    Page - settings
+    Method - GET
+    Overview - allows the user to update the all configs of A.R.M without
+    needing to open a text editor
+    """
+    # ARM UI config
+    armui_cfg = ui_utils.arm_db_cfg()
 
     # Load up the comments.json, so we can comment the arm.yaml
     comments = ui_utils.generate_comments()
     form = SettingsForm()
+    pages = page_setting_groups(cfg.arm_config)
+    system_context = _system_page_context()
 
     session["page_title"] = "Settings"
-
-    app.logger.debug(f"stats: {stats}")
 
     return render_template("settings/settings.html",
                            settings=cfg.arm_config,
                            ui_settings=armui_cfg,
-                           stats=stats,
                            apprise_cfg=cfg.apprise_config,
                            form=form,
                            jsoncomments=comments,
                            abcde_cfg=cfg.abcde_config,
-                           server=server,
-                           serverutil=serverutil,
-                           arm_path=arm_path,
-                           media_path=media_path,
-                           drives=drives,
-                           form_drive=form_drive,
                            ripper_read_only=is_read_only(cfg.arm_config_path),
                            apprise_read_only=is_read_only(cfg.apprise_config_path),
-                           abcde_read_only=is_read_only(cfg.abcde_config_path))
+                           abcde_read_only=is_read_only(cfg.abcde_config_path),
+                           secret_setting_keys=frozenset(
+                               key for key in cfg.arm_config if is_secret_setting_key(key)
+                           ),
+                           hidden_setting_keys=HIDDEN_SETTING_KEYS,
+                           boolean_setting_keys=BOOLEAN_SETTING_KEYS,
+                           enum_setting_choices=ENUM_SETTING_CHOICES,
+                           enum_setting_values={
+                               key: [choice[0] for choice in choices]
+                               for key, choices in ENUM_SETTING_CHOICES.items()
+                           },
+                           integer_setting_keys=INTEGER_SETTING_KEYS,
+                           port_setting_keys=PORT_SETTING_KEYS,
+                           setting_labels=SETTING_LABELS,
+                           setting_label=setting_label,
+                           general_setting_groups=pages["general"],
+                           ripper_setting_groups=pages["ripper"],
+                           notify_setting_groups=pages["notify"],
+                           abcde_fields=abcde_fields_for_ui(cfg.abcde_config),
+                           **system_context)
+
+
+_HW_TRANSCODE_CACHE = {"ts": 0.0, "status": None}
+_HW_TRANSCODE_CACHE_TTL = 3600
 
 
 def check_hw_transcode_support():
+    if yaml_is_true(cfg.arm_config.get("SKIP_TRANSCODE")):
+        return {"nvidia": False, "intel": False, "amd": False, "skipped": True}
+
+    now = time.time()
+    cached = _HW_TRANSCODE_CACHE["status"]
+    if cached is not None and (now - _HW_TRANSCODE_CACHE["ts"]) < _HW_TRANSCODE_CACHE_TTL:
+        return cached
+
     cmd = f"nice {cfg.arm_config['HANDBRAKE_CLI']}"
 
     app.logger.debug(f"Sending command: {cmd}")
     hw_support_status = {
         "nvidia": False,
         "intel": False,
-        "amd": False
+        "amd": False,
+        "skipped": False,
     }
     try:
         hand_brake_output = arm_subprocess(f"{cmd}", shell=True, check=True)
@@ -172,6 +250,8 @@ def check_hw_transcode_support():
         app.logger.debug(hand_brake_output)
     except subprocess.CalledProcessError:
         pass
+    _HW_TRANSCODE_CACHE["status"] = hw_support_status
+    _HW_TRANSCODE_CACHE["ts"] = now
     return hw_support_status
 
 
@@ -187,8 +267,18 @@ def save_settings():
     comments = ui_utils.generate_comments()
     success = False
     arm_cfg = {}
+    restart_needed = False
+    restart_keys = ("DISABLE_LOGIN", "WEBSERVER_IP", "WEBSERVER_PORT", "ARM_CHILDREN")
+    before = {key: str(cfg.arm_config.get(key)) for key in restart_keys}
     form = SettingsForm()
     if form.validate_on_submit():
+        errors = validate_ripper_form(request.form.to_dict(), cfg.arm_config)
+        if errors:
+            return {
+                'success': False,
+                'errors': errors,
+                'form': 'arm ripper settings',
+            }
         # Build the new arm.yaml with updated values from the user
         arm_cfg = ui_utils.build_arm_cfg(request.form.to_dict(), comments)
         # Save updated arm.yaml
@@ -201,11 +291,27 @@ def save_settings():
             # Set the ARM Log level to the config
             app.logger.info(f"Setting log level to: {cfg.arm_config['LOGLEVEL']}")
             app.logger.setLevel(cfg.arm_config['LOGLEVEL'])
+            restart_needed = any(
+                str(cfg.arm_config.get(key)) != before[key] for key in restart_keys
+            )
+            if restart_needed:
+                app.config['LOGIN_DISABLED'] = cfg.arm_config['DISABLE_LOGIN']
         except OSError as e:
             # arm.yaml is read-only
             app.logger.error(f"{cfg.arm_config_path} is read-only", exc_info=e)
+    elif request.method == "POST":
+        return {
+            'success': False,
+            'errors': _first_form_errors(form),
+            'form': 'arm ripper settings',
+        }
 
-    return {'success': success, 'settings': cfg.arm_config, 'form': 'arm ripper settings'}
+    return {
+        'success': success,
+        'settings': redacted_config(cfg.arm_config),
+        'form': 'arm ripper settings',
+        'restart_needed': restart_needed,
+    }
 
 
 @route_settings.route('/save_ui_settings', methods=['POST'])
@@ -215,28 +321,36 @@ def save_ui_settings():
     Page - save_ui_settings
     Method - POST
     Overview - Save 'UI Settings' page settings to database. Not a user page
-    Notes - This function needs to trigger a restart of flask for
-        debugging to update the values
     """
     form = UiSettingsForm()
     success = False
     arm_ui_cfg = UISettings.query.get(1)
     if form.validate_on_submit():
-        use_icons = (str(form.use_icons.data).strip().lower() == "true")
-        save_remote_images = (str(form.save_remote_images.data).strip().lower() == "true")
+        errors = validate_ui_form(form.index_refresh.data, form.database_limit.data)
+        if errors:
+            return {
+                'success': False,
+                'errors': errors,
+                'form': 'arm ui settings',
+            }
         arm_ui_cfg.index_refresh = format(form.index_refresh.data)
-        arm_ui_cfg.use_icons = use_icons
-        arm_ui_cfg.save_remote_images = save_remote_images
-        arm_ui_cfg.bootstrap_skin = format(form.bootstrap_skin.data)
-        arm_ui_cfg.language = format(form.language.data)
         arm_ui_cfg.database_limit = format(form.database_limit.data)
         arm_ui_cfg.notify_refresh = format(form.notify_refresh.data)
         db.session.commit()
         success = True
-    # Masking the jinja update, otherwise an error is thrown
-    # sqlalchemy.orm.exc.DetachedInstanceError: Instance <UISettings at 0x7f294c109fd0>
-    # app.jinja_env.globals.update(armui_cfg=arm_ui_cfg)
-    return {'success': success, 'settings': str(arm_ui_cfg), 'form': 'arm ui settings'}
+        ui_utils.arm_db_cfg()
+    elif request.method == "POST":
+        return {
+            'success': False,
+            'errors': _first_form_errors(form),
+            'form': 'arm ui settings',
+        }
+    return {
+        'success': success,
+        'settings': str(arm_ui_cfg),
+        'form': 'arm ui settings',
+        'reload_needed': success,
+    }
 
 
 @route_settings.route('/save_abcde_settings', methods=['POST'])
@@ -248,28 +362,36 @@ def save_abcde():
     Overview - Save 'abcde Config' page settings to the database. Not a user page
     """
     success = False
-    abcde_cfg_str = ""
+    abcde_cfg_str = cfg.abcde_config
     form = AbcdeForm()
-    if form.validate():
+    if form.validate_on_submit():
+        errors = validate_abcde_form(request.form)
+        if errors:
+            return {
+                'success': False,
+                'errors': errors,
+                'form': 'cd ripper settings',
+            }
         app.logger.debug(f"routes.save_abcde: Saving new abcde.conf: {cfg.abcde_config_path}")
-        abcde_cfg_str = str(form.abcdeConfig.data).strip()
-        # Windows machines can put \r\n instead of \n newlines, which corrupts the config file
-        clean_abcde_str = '\n'.join(abcde_cfg_str.splitlines())
-        # Save updated abcde.conf
+        abcde_cfg_str = apply_abcde_updates(cfg.abcde_config, request.form)
         try:
             with open(cfg.abcde_config_path, "w") as abcde_file:
-                abcde_file.write(clean_abcde_str)
+                abcde_file.write(abcde_cfg_str)
                 abcde_file.close()
             success = True
-            # Update the abcde config
-            cfg.abcde_config = clean_abcde_str
+            cfg.abcde_config = abcde_cfg_str
         except OSError as e:
             app.logger.error(f"{cfg.abcde_config_path} is read-only", exc_info=e)
+    elif request.method == "POST":
+        return {
+            'success': False,
+            'errors': _first_form_errors(form),
+            'form': 'cd ripper settings',
+        }
 
-    # If we get to here, there was no post-data
     return {'success': success,
-            'settings': clean_abcde_str,
-            'form': 'abcde config'}
+            'settings': abcde_cfg_str,
+            'form': 'cd ripper settings'}
 
 
 @route_settings.route('/save_apprise_cfg', methods=['POST'])
@@ -295,7 +417,10 @@ def save_apprise_cfg():
         except OSError as e:
             app.logger.error(f"{cfg.apprise_config_path} is read-only", exc_info=e)
     # If we get to here there was no post data
-    return {'success': success, 'settings': cfg.apprise_config, 'form': 'Apprise config'}
+    apprise_out = cfg.apprise_config
+    if isinstance(apprise_out, dict):
+        apprise_out = {k: mask_last(str(v)) if v else v for k, v in apprise_out.items()}
+    return {'success': success, 'settings': apprise_out, 'form': 'Apprise config'}
 
 
 @route_settings.route('/systeminfo', methods=['POST'])
@@ -321,12 +446,10 @@ def server_info():
         drive.drive_mode = str(form_drive.drive_mode.data).strip()
         db.session.commit()
         flash(f"Updated Drive {drive.name} details", "success")
-        # Return to the systeminfo page (refresh page)
-        return redirect(url_for(REDIRECT_SETTINGS))
+        return redirect_to_settings_tab()
     else:
         flash("Error: Unable to update drive details", "error")
-        # Return for GET
-        return redirect(url_for(REDIRECT_SETTINGS))
+        return redirect_to_settings_tab()
 
 
 @route_settings.route('/systemdrivescan')
@@ -339,7 +462,7 @@ def system_drive_scan():
     # Update to scan for changes to the ripper system
     new_count = drive_utils.drives_update()
     flash(f"ARM found {new_count} new drives", "success")
-    return redirect(url_for(REDIRECT_SETTINGS))
+    return redirect_to_settings_tab()
 
 
 @route_settings.route('/drive/eject/<eject_id>')
@@ -353,17 +476,17 @@ def drive_eject(eject_id):
     except sqlalchemy.exc.NoResultFound as e:
         app.logger.error(f"Drive eject encountered an error: {e}")
         flash(f"Cannot find drive {eject_id} in database.", "error")
-        return redirect(url_for(REDIRECT_SETTINGS))
+        return redirect_to_settings_tab()
     # block for running jobs
     if drive.job_id_current:
         drive.tray_status()  # update tray status
         if not drive.open:  # allow closing
             flash(f"Job [{drive.job_id_current}] in progress. Cannot eject {eject_id}.", "error")
-            return redirect(url_for(REDIRECT_SETTINGS))
+            return redirect_to_settings_tab()
     # toggle open/close (with non-critical error)
     if (error := drive.eject(method="toggle")) is not None:
         flash(error, "error")
-    return redirect(url_for(REDIRECT_SETTINGS))
+    return redirect_to_settings_tab()
 
 
 @route_settings.route('/drive/remove/<remove_id>')
@@ -382,7 +505,7 @@ def drive_remove(remove_id):
     except Exception as e:
         app.logger.error(f"Drive removal encountered an error: {e}")
         flash("Drive unable to be removed, check logs for error", "error")
-    return redirect(url_for(REDIRECT_SETTINGS))
+    return redirect_to_settings_tab()
 
 
 @route_settings.route('/drive/manual/<manual_id>')
@@ -422,7 +545,7 @@ def drive_manual(manual_id):
         app.logger.error(f"stderr: {e.stderr}")
 
     flash(message, status)
-    return redirect('/settings')
+    return redirect_to_settings_tab()
 
 
 @route_settings.route('/testapprise')
@@ -438,7 +561,7 @@ def testapprise():
         message = message + f" Server URL: http://{cfg.arm_config['UI_BASE_URL']}:{cfg.arm_config['WEBSERVER_PORT']}"
     ripper_utils.notify(None, "ARM notification", message)
     flash("Test notification sent ", "success")
-    return redirect(url_for(REDIRECT_SETTINGS))
+    return redirect_to_settings_tab("notifications")
 
 
 @route_settings.route('/updatesysinfo')
@@ -472,4 +595,4 @@ def update_sysinfo():
 
     db.session.commit()
 
-    return redirect(url_for(REDIRECT_SETTINGS))
+    return redirect_to_settings_tab("sysinfo")

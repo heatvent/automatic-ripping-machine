@@ -14,24 +14,32 @@ USER="arm"
 #######################################################################################
 
 START_RIP=1
-if [ "$ID_CDROM_MEDIA_DVD" == "1" ]; then
+if [ "$ID_CDROM_MEDIA" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_DVD" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_BD" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_CD" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_CD_R" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_CD_RW" != "1" ] \
+   && [ -z "$ID_FS_TYPE" ]; then
+	echo "[ARM] No disc present on ${DEVNAME}; skipping ripper start" | logger -t ARM -s
+	START_RIP=0
+elif [ "$ID_CDROM_MEDIA_DVD" == "1" ]; then
 	echo "[ARM] Starting ARM for DVD on ${DEVNAME}" | logger -t ARM -s
 
 elif [ "$ID_CDROM_MEDIA_BD" == "1" ]; then
 	echo "[ARM] Starting ARM for Blu-ray on ${DEVNAME}" | logger -t ARM -s
 
-elif [[ "$ID_CDROM_MEDIA_CD" == "1" || "$ID_CDROM_MEDIA_CD_R" == "1" || "$ID_CDROM_MEDIA_CD_RW" == "1" ]]; then
+elif [ -n "$ID_CDROM_MEDIA_TRACK_COUNT_AUDIO" ]; then
 	echo "[ARM] Starting ARM for CD on ${DEVNAME}" | logger -t ARM -s
 
 elif [ "$ID_FS_TYPE" != "" ]; then
 	echo "[ARM] Starting ARM for Data Disk on ${DEVNAME} with File System ${ID_FS_TYPE}" | logger -t ARM -s
 
+elif [[ "$ID_CDROM_MEDIA_CD" == "1" || "$ID_CDROM_MEDIA_CD_R" == "1" || "$ID_CDROM_MEDIA_CD_RW" == "1" ]]; then
+	echo "[ARM] Starting ARM for CD on ${DEVNAME}" | logger -t ARM -s
+
 else
 	echo "[ARM] Starting ARM for unknown disc type on ${DEVNAME}" | logger -t ARM -s
-	if [[ "$ID_CDROM_MEDIA" != "1" ]]; then
-		echo "[ARM] No disc present on ${DEVNAME}; skipping ripper start" | logger -t ARM -s
-		START_RIP=0
-	fi
 fi
 
 if [[ "$START_RIP" == "1" ]]; then

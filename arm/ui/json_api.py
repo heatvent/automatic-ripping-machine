@@ -3,7 +3,9 @@ Basic json api for access to A.R.M UI
 Also used to connect to both omdb and tmdb
 """
 import os
+import signal
 import subprocess
+import threading
 import re
 import html
 from collections import deque
@@ -11,7 +13,7 @@ from pathlib import Path
 import datetime
 import psutil
 from flask import request
-from time import time, strftime, gmtime
+from time import time, strftime, gmtime, sleep
 
 import arm.config.config as cfg
 from arm.models.config import Config
@@ -57,7 +59,7 @@ def get_x_jobs(job_status):
         try:
             job_results[i]['config'] = j.config.get_d()
         except AttributeError:
-            job_results[i]['config'] = "config not found"
+            job_results[i]['config'] = {}
             app.logger.debug("couldn't get config")
 
         for key, value in j.get_d().items():
@@ -352,12 +354,13 @@ def search(search_query):
         try:
             search_results[i]['config'] = job.config.get_d()
         except AttributeError:
-            search_results[i]['config'] = "config not found"
+            search_results[i]['config'] = {}
             app.logger.debug("couldn't get config")
 
         for key, value in iter(job.get_d().items()):
             if key != "config":
-                search_results[i][str(key)] = str(value)
+                text = "" if value in (None, "None", "null") else str(value)
+                search_results[i][str(key)] = text
         i += 1
     return {'success': True, 'mode': 'search', 'results': search_results}
 
@@ -544,9 +547,11 @@ def terminate_process(pid):
 
 def change_job_params(config_id):
     """Update values for job"""
+    if request.method != 'POST':
+        return {'success': False, 'error': 'POST required', 'form': 'change_job_params'}
     job = Job.query.get(config_id)
     config = job.config
-    form = ChangeParamsForm(request.args, meta={'csrf': False})
+    form = ChangeParamsForm()
     app.logger.debug("Before valid")
     if form.validate():
         app.logger.debug("Valid")
@@ -554,8 +559,8 @@ def change_job_params(config_id):
         cfg.arm_config["MINLENGTH"] = config.MINLENGTH = format(form.MINLENGTH.data)
         cfg.arm_config["MAXLENGTH"] = config.MAXLENGTH = format(form.MAXLENGTH.data)
         cfg.arm_config["RIPMETHOD"] = config.RIPMETHOD = format(form.RIPMETHOD.data)
-        # must be 1 for True 0 for False
-        cfg.arm_config["MAINFEATURE"] = config.MAINFEATURE = 1 if format(form.MAINFEATURE.data).lower() == "true" else 0
+        config.MAINFEATURE = bool(form.MAINFEATURE.data)
+        cfg.arm_config["MAINFEATURE"] = config.MAINFEATURE
         args = {'disctype': job.disctype}
         message = f'Parameters changed. Rip Method={config.RIPMETHOD}, Main Feature={config.MAINFEATURE},' \
                   f'Minimum Length={config.MINLENGTH}, Maximum Length={config.MAXLENGTH}, Disctype={job.disctype}'
@@ -598,12 +603,19 @@ def get_notify_timeout(notify_timeout):
 
 
 def restart_ui():
-    app.logger.debug("Arm ui shutdown....")
-    shutdown_code = subprocess.check_output(
-        "pkill python3",
-        shell=True
-    ).decode("utf-8")
-    # Nothing should work past here as the ui will die after running code above
-    app.logger.debug(f"Arm ui shutdown ran into a problem... exit code: {shutdown_code}")
-    return_json = {'success': False, 'error': f"Shutting down A.R.M UI....exit code: {shutdown_code}"}
-    return return_json
+    """Restart only the ARM UI process. Runit/systemd will bring it back.
+
+    Does not kill ripper processes (unlike the old pkill python3).
+    """
+    app.logger.info("ARM UI restart requested")
+
+    def _signal_self():
+        sleep(0.4)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    threading.Thread(target=_signal_self, daemon=True).start()
+    return {
+        'success': True,
+        'mode': 'restart',
+        'message': 'Restarting ARM UI',
+    }

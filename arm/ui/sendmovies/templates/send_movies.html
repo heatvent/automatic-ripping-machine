@@ -7,19 +7,12 @@
     }
 </style>
 <div class="container-fluid h-100 mx-auto">
-    <div class="row">
-        <div class="col-sm-12  rounded text-center">
-            <img src="static/img/arm80.png" alt="Automatic Ripping Machine">
-            <p class="text-center">
-                <strong>Welcome to your Automatic Ripping Machine<br></strong>
-            </p>
-        </div>
-    </div>
+    <h1 class="page-heading">Send DVDs to API</h1>
 
     <div class="jumbotron mb-5">
         <div class="row h-100 mx-auto align-items-center">
             <div class="col-sm-12 mx-auto">
-                <h5 class="text-center"><strong>These are the movies we tried to send to the ARM API</strong></h5>
+                <h2 class="page-heading text-center">Movies sent to the ARM API</h2>
             </div>
         </div>
         <div class="row">
@@ -63,7 +56,7 @@
                         .addClass("alert-info").parent().removeClass("row")
                 });
         })
-        activeTab("navsendmovies");
+        activeTab("sendmovies");
     });
 </script>
 {% endblock %}

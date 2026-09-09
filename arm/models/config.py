@@ -1,12 +1,10 @@
 from prettytable import PrettyTable
 
+from arm.config.config_utils import SECRET_SETTING_KEYS
 from arm.ui import db
 
 
-hidden_attribs = ("OMDB_API_KEY", "EMBY_USERID", "EMBY_PASSWORD",
-                  "EMBY_API_KEY", "PB_KEY", "IFTTT_KEY", "PO_KEY",
-                  "PO_USER_KEY", "PO_APP_KEY", "ARM_API_KEY",
-                  "TMDB_API_KEY", "_sa_instance_state")
+hidden_attribs = tuple(SECRET_SETTING_KEYS) + ("_sa_instance_state",)
 HIDDEN_VALUE = "<hidden>"
 
 
@@ -120,5 +118,5 @@ class Config(db.Model):
         return_dict = {}
         for key, value in self.__dict__.items():
             if str(key) not in hidden_attribs:
-                return_dict[str(key)] = str(value)
+                return_dict[str(key)] = None if value is None else str(value)
         return return_dict

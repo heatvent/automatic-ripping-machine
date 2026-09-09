@@ -11,20 +11,10 @@
     }
 </style>
     <div class="container-fluid h-100 mx-auto">
-        <!-- Header image -->
-        <div class="row">
-            <div class="col-sm-12  rounded text-center">
-                <img src="static/img/arm80.png" alt="Automatic Ripping Machine">
-                <p class="text-center">
-                    <strong>Welcome to your Automatic Ripping Machine<br></strong>
-                </p>
-            </div>
-        </div>
+        <h1 class="page-heading">Database</h1>
         <div class="row h-100 mx-auto align-items-center">
             <div class="col-sm-12 mx-auto">
-                <p class="text-center">
-                    <h5 class="text-center"><strong>Database Entries</strong></h5>
-                </p>
+                <h2 class="page-heading text-center">Database Entries</h2>
             </div>
         </div>
         <!-- Modal -->
@@ -59,25 +49,25 @@
         </div>
         <!-- Messages -->
         <div id="message1" class="alert alert-success d-none" role="alert">
-            <h4 class="alert-heading">Job was deleted successfully</h4>
+            <p class="alert-heading">Job was deleted successfully</p>
         </div>
         <div id="message2" class="alert alert-danger text-center">
             <strong>WARNING: </strong>There is no undo here!
             <br>Be careful!
         </div>
         <div id="message3" class="alert alert-danger d-none" role="alert">
-            <h4 class="alert-heading">There was a problem with your request</h4>
+            <p class="alert-heading">There was a problem with your request</p>
             <p>There was a problem with your request. Check the ARMui log for more details.</p>
         </div>
         <!-- Buttons -->
-        <div class="row d-flex justify-content-end">
+        <div class="row db-toolbar d-flex justify-content-end">
             <div class="p-4">
-                <button id="save-get-success" type="button" class="btn btn-secondary btn-success">Get all successful
+                <button id="save-get-success" type="button" class="btn btn-sm btn-success">Get all successful
                     jobs
                 </button>
-                <button id="save-get-failed" type="button" class="btn btn-secondary btn-danger">Get all failed jobs
+                <button id="save-get-failed" type="button" class="btn btn-sm btn-danger">Get all failed jobs
                 </button>
-                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal"
+                <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal"
                         data-type="search" data-href="json?mode=search&q=">Search Database
                 </button>
             </div>
@@ -86,6 +76,7 @@
         {% with pages=pages, page_name="route_database.view_database" %}
             {% include "pagination.html" %}
         {% endwith %}
+        {% from 'macros/icons.html' import status_badge %}
         <!-- All jobs -->
         <div class="row">
             <div class="col-md-12 mx-auto">
@@ -110,18 +101,18 @@
                                         {% if not job.poster_url or job.poster_url == "None" %}
                                             {% if job.video_type == "Music" %}
                                                 <a href="jobdetail?job_id={{ job.job_id }}"><img src="static/img/music.png"
-                                                                                                width="240px"
+                                                                                                width="160"
                                                                                                 class="img-thumbnail"
                                                                                                 alt="No Poster Image"></a>
                                             {% else %}
                                                 <a href="jobdetail?job_id={{ job.job_id }}"><img src="static/img/none.png"
-                                                                                                width="240px"
+                                                                                                width="160"
                                                                                                 class="img-thumbnail"
                                                                                                 alt="No Poster Image"></a>
                                             {% endif %}
                                         {% else %}
                                             <a href="jobdetail?job_id={{ job.job_id }}"><img src="{{ job.poster_url }}"
-                                                                                             width="240px"
+                                                                                             width="160"
                                                                                              class="img-thumbnail"
                                                                                              alt="Poster image"></a>
                                         {% endif %}
@@ -137,11 +128,7 @@
                                                 <strong>Year: </strong> {{ job["year"] }}<br>
                                             {% endif %}
                                             <strong>Device: </strong>{{ job.devpath }}<br>
-                                            <strong>Status: </strong><img id="status{{ job.job_id }}"
-                                                                          src="static/img/{{ job.status }}.png"
-                                                                          height="20px"
-                                                                          alt="{{ job.status }}"
-                                                                          title="{{ job.status }}"><br>
+                                            <strong>Status: </strong>{{ status_badge(job.status, 'status' ~ job.job_id) }}<br>
                                             <strong>Start Date:</strong>{{ job.start_time.strftime(date_format) if
                                     job.start_time is not none }}<br>
                                             <strong>Start Time:</strong>{{ job.start_time.strftime("%H:%M:%S") if job.start_time
@@ -161,24 +148,24 @@
                                                 Length: </strong>{{ job.config.MAXLENGTH }}</div>
                                         </div>
                                         <div class="card-body px-2 py-1">
-                                            <div class="btn-group-vertical" role="group" aria-label="buttons">
-                                                <button type="button" class="btn btn-primary" data-toggle="modal"
+                                            <div class="btn-group-vertical job-actions" role="group" aria-label="buttons">
+                                                <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
                                                         data-target="#exampleModal" data-type="abandon"
                                                         data-jobid="{{ job.job_id }}"
                                                         data-href="json?job={{ job.job_id }}&mode=abandon">Abandon Job
                                                 </button>
-                                                <button type="button" class="btn btn-primary" data-toggle="modal"
+                                                <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
                                                         data-target="#exampleModal" data-type="delete"
                                                         data-jobid="{{ job.job_id }}"
                                                         data-href="json?job={{ job.job_id }}&mode=delete">Delete Job
                                                 </button>
-                                                <button type="button" class="btn btn-primary" data-toggle="modal"
+                                                <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
                                                         data-target="#exampleModal" data-type="log"
                                                         data-jobid="{{ job.job_id }}"
                                                         data-href="json?logfile={{ job.logfile }}&mode=full&job={{ job.job_id }}">
                                                     View Logfile
                                                 </button>
-                                                <button type="button" class="btn btn-primary" data-toggle="modal"
+                                                <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
                                                         data-target="#exampleModal" data-type="fixperms"
                                                         data-jobid="{{ job.job_id }}"
                                                         data-href="json?mode=fixperms&job={{ job.job_id }}">Fix
@@ -208,7 +195,7 @@
 {% block js %}
     {{ super() }}
 
-    <script type="application/javascript">activeTab("databaseview");</script>
+    <script type="application/javascript">activeTab("database");</script>
     <script type="application/javascript" src="static/js/common.js"></script>
     <script type="application/javascript" src="static/js/database.js"></script>
 {% endblock %}

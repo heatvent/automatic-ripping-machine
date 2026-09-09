@@ -8,23 +8,16 @@
     <meta name="viewport" content="viewport-fit=cover, user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}" crossorigin="use-credentials"/>
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}"/>
+    <meta name="theme-color" content="#121212">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400;500;600;700;800&family=TASA+Orbiter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Hide page initially to prevent flash -->
     <style>
-        html { visibility: hidden; }
+        html { background-color: #121212; }
     </style>
-
-    <!-- dark mode script -->
     <script type="application/javascript">
-        (function() {
-            const darkPref = localStorage.getItem('darkSwitch');
-            if (darkPref === 'dark') {
-                document.documentElement.setAttribute('data-theme', 'dark');
-            }
-            document.addEventListener('DOMContentLoaded', () => {
-                document.documentElement.style.visibility = 'visible';
-            });
-        })();
+        document.documentElement.setAttribute('data-theme', 'dark');
     </script>
 
     <!-- Libraries -->
@@ -43,29 +36,17 @@
     <!-- Highlight Active Tab -->
     <script type="application/javascript">
         function activeTab(tab) {
-            $("#nav" + tab).addClass("active");
+            const key = String(tab || "").replace(/^nav/, "");
+            $(".nav-link, .sidebar-user").removeClass("active");
+            $("[data-nav='" + key + "']").addClass("active");
         }
     </script>
 
-    <!-- Dark Mode Button CSS -->
-    <style>
-        .custom-control-input:checked ~ .custom-control-label::before {
-            color: #ced4da;
-            border-color: #e8e8e8;
-            background-color: #007bff;
-        }
-        div.custom-switch .custom-control-label {
-            color: #ced4da !important;
-        }
-    </style>
-
     <!-- Set Page Title -->
-    {% if session["arm_name"] %}
-        {% if session["page_title"] %}
-            <title>[{{ session["arm_name"] }}] - {{ session["page_title"] }} - ARM</title>
-        {% endif %}
+    {% if session["page_title"] %}
+        <title>{{ session["page_title"] }} - Automatic Ripping Machine</title>
     {% else %}
-        <title>ARM</title>
+        <title>Automatic Ripping Machine</title>
     {% endif %}
 
     {% block head_extra %}{% endblock %}

@@ -9,7 +9,7 @@ Covers
 """
 from sqlite3 import OperationalError
 import bcrypt
-from flask import redirect, render_template, request, Blueprint, flash, app, session
+from flask import redirect, render_template, request, Blueprint, flash, app, session, url_for
 from flask_login import LoginManager, login_required, \
     current_user, login_user, logout_user  # noqa: F401
 
@@ -17,6 +17,7 @@ from arm.ui import app, db, constants   # noqa: F811
 from arm.models.user import User
 from arm.ui.forms import SetupForm, DBUpdate, PasswordReset
 import arm.ui.utils as ui_utils
+import arm.config.config as cfg
 
 route_auth = Blueprint('route_auth', __name__,
                        template_folder='templates',
@@ -76,7 +77,11 @@ def login():
         if login_hashed == password and login_username == admin.email:
             login_user(admin)
             app.logger.debug("user was logged in - redirecting")
-            return_redirect = redirect(constants.HOME_PAGE)
+            if ui_utils.user_has_default_password(admin):
+                flash("Change the default admin password before continuing.", "warning")
+                return_redirect = redirect(url_for("route_auth.profile"))
+            else:
+                return_redirect = redirect(constants.HOME_PAGE)
         else:
             flash("Something isn't right", "danger")
 
@@ -98,39 +103,38 @@ def logout():
     return redirect('/')
 
 
+@route_auth.route('/profile', methods=['GET', 'POST'])
 @route_auth.route('/update_password', methods=['GET', 'POST'])
 @login_required
-def update_password():
+def profile():
     """
-    updating the password for the admin account
+    Account page: change password and log out.
+    /update_password remains as an alias used by the default-password gate.
     """
-    # get current user
     user = User.query.first()
-    session["page_title"] = "Update Admin Password"
-
-    # After a login for is submitted
+    session["page_title"] = "Profile"
     form = PasswordReset()
 
     if form.validate_on_submit():
-        # Get form values
         username = form.username.data.strip()
         new_password = form.new_password.data.strip().encode('utf-8')
         old_password = form.old_password.data.strip().encode('utf-8')
 
-        # Get current password and dehash
         user = User.query.filter_by(email=username).first()
         current_password = user.password
         hashed = user.hash
         login_hashed = bcrypt.hashpw(old_password, hashed)
 
-        # If user entered correct password
         if login_hashed == current_password:
+            if new_password == b"password":
+                flash("Choose a password other than the default.", "danger")
+                return render_template('profile.html', user=user.email, form=form)
             hashed_password = bcrypt.hashpw(new_password, hashed)
             user.password = hashed_password
             user.hash = hashed
             try:
                 db.session.commit()
-                flash("Password successfully updated", "success")
+                flash("Password successfully updated. Sign in again.", "success")
                 app.logger.info("Password successfully updated")
                 return redirect("logout")
             except Exception as error:
@@ -140,7 +144,7 @@ def update_password():
             flash("Current password does not match", "danger")
             app.logger.error("Current password does not match")
 
-    return render_template('update_password.html', user=user.email, form=form)
+    return render_template('profile.html', user=user.email, form=form)
 
 
 @login_manager.user_loader
@@ -165,3 +169,28 @@ def unauthorized():
     :return: redirect to login page
     """
     return redirect('/login')
+
+
+@app.before_request
+def require_non_default_password():
+    """Block the rest of the UI until the default admin password is changed."""
+    if cfg.arm_config.get("DISABLE_LOGIN"):
+        return None
+    if not current_user.is_authenticated:
+        return None
+    endpoint = request.endpoint or ""
+    if endpoint in ("route_auth.profile", "route_auth.logout", "route_auth.login", "static"):
+        return None
+    if request.path.startswith("/static"):
+        return None
+    admin = User.query.first()
+    if not ui_utils.user_has_default_password(admin):
+        return None
+    if request.path.startswith("/json"):
+        return app.response_class(
+            response='{"success": false, "error": "Change the default admin password"}',
+            status=403,
+            mimetype=constants.JSON_TYPE,
+        )
+    flash("Change the default admin password before continuing.", "warning")
+    return redirect(url_for("route_auth.profile"))

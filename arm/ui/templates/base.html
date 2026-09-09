@@ -1,39 +1,94 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
     <!-- HTML Header -->
     {% include 'head.html' %}
-    <body style="padding: 70px 15px 50px;">
-        <!-- HTML Navigation -->
-        {% include 'nav.html' %}
-        <!-- Errors -->
-        <div id="content" class="h-100 content" style="width: 99%;padding-top: 51px;padding-left: 15px;">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div id="message1" class="alert alert-{{ category if category !=" message
-            " else 'info' }} text-center"
-                             role="alert">
-                            <h4 class="alert-heading">{{ message|safe }}</h4>
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            {% block content %}{% endblock %}</div>
-        <!-- Footer -->
-        <div id="footer" class="container-fluid h-100">
-            <div class="row" style="height: 30px;"></div>
-            <div class="row h-100" style="height: 40px;">
-                <div class="col-sm-12 h-100">
+    <body class="arm-shell-body">
+        <div class="app-shell">
+            {% include 'nav.html' %}
+            <div class="app-main">
+                <div id="uiActionBanner" class="ui-action-banner d-none" role="status">
+                    <span id="uiActionBannerText">Reload the page to apply UI settings.</span>
+                    <button type="button" id="uiReloadBtn" class="btn btn-primary btn-sm">Reload</button>
+                    <button type="button" id="uiRestartBtn" class="btn btn-primary btn-sm d-none">Restart UI</button>
+                    <button type="button" id="uiBannerDismiss" class="banner-dismiss" aria-label="Dismiss">&times;</button>
+                </div>
+                <div id="content" class="h-100 content">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category if category != "message" else 'info' }} text-center"
+                                     role="alert">
+                                    <p class="alert-heading">{{ message|safe }}</p>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    {% block content %}{% endblock %}
+                </div>
+                <div id="footer" class="container-fluid">
                     {% block footer %}
-                        <p class="text-center h-100" style="margin-bottom: auto; margin-top: auto"> Automatic Ripping Machine.
+                        <p class="text-center" style="margin-bottom: auto; margin-top: auto"> Automatic Ripping Machine.
                             Find us on <a
                                     href="https://github.com/automatic-ripping-machine/automatic-ripping-machine">github</a>.
                         </p>
                     {% endblock %}
                 </div>
             </div>
+            {% include 'bottom_nav.html' %}
         </div>
         {% block js %}
         {% endblock %}
+        <script>
+            (function () {
+                const banner = document.getElementById("uiActionBanner");
+                const text = document.getElementById("uiActionBannerText");
+                const reloadBtn = document.getElementById("uiReloadBtn");
+                const restartBtn = document.getElementById("uiRestartBtn");
+                const dismiss = document.getElementById("uiBannerDismiss");
+                if (!banner) {
+                    return;
+                }
+
+                function showUiActionBanner(kind) {
+                    const restart = kind === "restart";
+                    text.textContent = restart
+                        ? "Restart the web UI to apply these settings. In-progress rips are not stopped."
+                        : "Reload this page to apply UI settings.";
+                    reloadBtn.classList.toggle("d-none", restart);
+                    restartBtn.classList.toggle("d-none", !restart);
+                    banner.classList.remove("d-none");
+                    try {
+                        window.sessionStorage.setItem("armUiAction", kind);
+                    } catch (err) {}
+                }
+
+                window.showUiActionBanner = showUiActionBanner;
+
+                try {
+                    const pending = window.sessionStorage.getItem("armUiAction");
+                    if (pending === "restart" || pending === "reload") {
+                        showUiActionBanner(pending);
+                    }
+                } catch (err) {}
+
+                reloadBtn.addEventListener("click", function () {
+                    try { window.sessionStorage.removeItem("armUiAction"); } catch (err) {}
+                    window.location.reload();
+                });
+                restartBtn.addEventListener("click", function () {
+                    restartBtn.disabled = true;
+                    try { window.sessionStorage.removeItem("armUiAction"); } catch (err) {}
+                    fetch("json?mode=restart", { credentials: "same-origin" })
+                        .then(function () {
+                            window.setTimeout(function () { window.location.reload(); }, 2000);
+                        })
+                        .catch(function () { restartBtn.disabled = false; });
+                });
+                dismiss.addEventListener("click", function () {
+                    banner.classList.add("d-none");
+                    try { window.sessionStorage.removeItem("armUiAction"); } catch (err) {}
+                });
+            })();
+        </script>
     </body>
 </html>

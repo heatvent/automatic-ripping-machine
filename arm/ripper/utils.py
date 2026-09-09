@@ -22,7 +22,7 @@ from netifaces import interfaces, ifaddresses, AF_INET
 import arm.config.config as cfg
 from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import db  # needs to be imported before models
-from arm.models.job import Job, JobState
+from arm.models.job import Job, JobState, job_holds_drive
 from arm.models.notifications import Notifications
 from arm.models.track import Track
 from arm.models.user import User
@@ -34,6 +34,30 @@ NOTIFY_TITLE = "ARM notification"
 
 class RipperException(Exception):
     pass
+
+
+def format_job_errors(errors):
+    """Turn job.errors into a single message.
+
+    job.errors is a Text column, so joining it as a sequence splits the
+    message into letters.
+    """
+    if not errors:
+        return ""
+    if isinstance(errors, str):
+        return errors
+    if isinstance(errors, (list, tuple, set)):
+        return ", ".join(str(item) for item in errors)
+    return str(errors)
+
+
+def should_wait_for_manual(job):
+    """True when this job should pause for a UI title override."""
+    if not job.config.MANUAL_WAIT:
+        return False
+    if not getattr(job, "manual_mode", False):
+        return False
+    return True
 
 
 def notify(job, title: str, body: str):
@@ -466,8 +490,6 @@ def rip_music(job, logfile):
             # TODO check output and confirm all tracks ripped; find "Finished\.$"
             subprocess.check_output(cmd, shell=True).decode("utf-8")
             logging.info("abcde call successful")
-            args = {"status": JobState.IDLE.value}
-            database_updater(args, job)
             return True
         except subprocess.CalledProcessError as ab_error:
             err = f"Call to abcde failed with code: {ab_error.returncode} ({ab_error.output})"
@@ -568,6 +590,7 @@ def try_add_default_user():
         pass1 = "password".encode('utf-8')
         hashed = bcrypt.gensalt(12)
         database_adder(User(email=username, password=bcrypt.hashpw(pass1, hashed), hashed=hashed))
+        logging.warning("Created default admin user (admin/password). Change this password immediately.")
         perm_file = Path(PurePath(cfg.arm_config['INSTALLPATH'], "installed"))
         write_permission_file = open(perm_file, "w")
         write_permission_file.write("boop!")
@@ -651,7 +674,9 @@ def database_updater(args, job, wait_time=90):
     the new value.
     :param job: This is the job object
     :param int wait_time: Number of times to try(1 sec sleep between try)
-    :return: Success
+    :return: True if the commit succeeded
+    :raises RipperException: if SQLite stays locked for wait_time seconds
+    :raises RuntimeError: for non-lock database errors
     """
     if not isinstance(args, dict):
         db.session.rollback()
@@ -672,9 +697,11 @@ def database_updater(args, job, wait_time=90):
                 logging.debug(f"database is locked - try {i}/{wait_time}")
             else:
                 logging.debug(f"Error: {error}")
+                db.session.rollback()
                 raise RuntimeError(str(error)) from error
     logging.error(f"database is locked after {wait_time}s; update was not committed")
-    return False
+    db.session.rollback()
+    raise RipperException(f"database is locked after {wait_time}s; update was not committed")
 
 
 def database_adder(obj_class):
@@ -683,6 +710,8 @@ def database_adder(obj_class):
     Used to stop database locked error\n
     :param obj_class: Job/Config/Track/ etc
     :return: True if success
+    :raises RipperException: if SQLite stays locked for 90 seconds
+    :raises RuntimeError: for non-lock database errors
     """
     for i in range(90):  # give up after the users wait period in seconds
         try:
@@ -697,9 +726,11 @@ def database_adder(obj_class):
                 logging.debug(f"database is locked - try {i}/90")
             else:
                 logging.error(f"Error: {error}")
+                db.session.rollback()
                 raise RuntimeError(str(error)) from error
     logging.error(f"database is locked after 90s; {type(obj_class).__name__} was not added")
-    return False
+    db.session.rollback()
+    raise RipperException(f"database is locked after 90s; {type(obj_class).__name__} was not added")
 
 
 def clean_old_jobs():
@@ -762,7 +793,10 @@ def duplicate_run_check(dev_path):
     """
     Kills this run if another run was triggered recently on the same device\n
     Some drives will trigger the udev twice causing 1 disc insert to add 2 jobs\n
-    this stops that issue
+    this stops that issue.
+
+    A job that has already ejected and is only transcoding does not hold the
+    drive, so a new disc may start.
     :return: None
     """
     # Log running jobs by job status
@@ -776,17 +810,24 @@ def duplicate_run_check(dev_path):
     )
     for job in running_jobs:
         logging.info(f"Device {dev_path}: Job ({job.job_id}) status '{job.status}'")
+        # Catch a second udev fire before the first job is associated with the drive.
+        if job_holds_drive(job) and job.start_time and job.run_time < 180:
+            logging.critical(f"Job ({job.job_id}) still holds {dev_path}.")
+            raise RipperException(f"Job already running on {dev_path}")
     # check for running jobs by associated drive.
     drive = SystemDrives.query.filter_by(mount=dev_path).first()
     if drive is None or not drive.processing:
         return  # unknown or idle drive is safe to start another run.
     job = drive.job_current
+    if not job_holds_drive(job):
+        logging.info(
+            f"Drive {dev_path} has job ({job.job_id}) in '{job.status}', "
+            "but ripping is finished; allowing a new job."
+        )
+        return
     logging.critical(f'Drive {dev_path} has an active Job ({job.job_id}): {job.status}.')
-    # log time
     job_time = ceil(job.run_time // 60)
     logging.info(f"Job was started {job_time}min ago.")
-    if (job_time) < 3:
-        logging.info("Job was started less than 3min ago.")
     raise RipperException(f"Job already running on {dev_path}")
 
 
@@ -896,25 +937,29 @@ def job_dupe_check(job):
 def check_for_wait(job):
     """
     Wait if we have waiting for user input updates\n\n
+    Auto-mode drives start ripping immediately. Manual-mode drives still
+    pause so the UI can override the title.
     :param job: Current Job
     :return: None
     """
-    #  If we have waiting for user input enabled
-    if job.config.MANUAL_WAIT:
-        logging.info(f"Waiting {job.config.MANUAL_WAIT_TIME} seconds for manual override.")
-        database_updater({"status": JobState.MANUAL_WAIT_STARTED.value}, job)
-        sleep_time = 0
-        while sleep_time < job.config.MANUAL_WAIT_TIME:
-            time.sleep(5)
-            sleep_time += 5
-            db.session.refresh(job)
-            if job.title_manual:
-                logging.info("Manual override found.  Overriding auto identification values.")
-                job.updated = True
-                job.hasnicetitle = True
-                database_updater({"hasnicetitle": True, "updated": True}, job)
-                break
-        database_updater({"status": JobState.IDLE.value}, job)
+    if not should_wait_for_manual(job):
+        if job.config.MANUAL_WAIT and not getattr(job, "manual_mode", False):
+            logging.info("Drive is in auto mode; skipping manual wait.")
+        return
+    logging.info(f"Waiting {job.config.MANUAL_WAIT_TIME} seconds for manual override.")
+    database_updater({"status": JobState.MANUAL_WAIT_STARTED.value}, job)
+    sleep_time = 0
+    while sleep_time < job.config.MANUAL_WAIT_TIME:
+        time.sleep(5)
+        sleep_time += 5
+        db.session.refresh(job)
+        if job.title_manual:
+            logging.info("Manual override found.  Overriding auto identification values.")
+            job.updated = True
+            job.hasnicetitle = True
+            database_updater({"hasnicetitle": True, "updated": True}, job)
+            break
+    database_updater({"status": JobState.IDLE.value}, job)
 
 
 def get_drive_mode(devpath: str) -> str:

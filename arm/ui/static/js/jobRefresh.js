@@ -122,7 +122,7 @@ function updateProgress(job, oldJob) {
 function checkTranscodeStatus(job) {
     let status = false;
     // HandBrake has the disc/files and should be outputting stage and eta
-    if (job.status === "transcoding") {
+    if (job.status === "transcoding" || job.status === "waiting_transcode") {
         status = true;
     }
     // MakeMKV has the disc and should be outputting stage and eta
@@ -171,14 +171,25 @@ function updateJobItem(oldJob, job) {
         cardHeader[0].innerText = headerText;
     }
     const nextPoster = (typeof jobPosterSrc === "function") ? jobPosterSrc(job) : job.poster_url;
-    if (posterUrl[0] && !posterUrl[0].src.includes(nextPoster) && posterUrl[0].src !== nextPoster) {
-        posterUrl[0].src = nextPoster;
+    if (posterUrl[0]) {
+        try {
+            const current = new URL(posterUrl[0].src, window.location.origin);
+            const next = new URL(nextPoster, window.location.origin);
+            if (current.href !== next.href) {
+                posterUrl[0].src = nextPoster;
+            }
+        } catch (err) {
+            if (posterUrl[0].src !== nextPoster) {
+                posterUrl[0].src = nextPoster;
+            }
+        }
     }
-    // Update job status image
-    if (job.status !== status[0].title) {
-        status[0].src = `static/img/${job.status}.png`;
-        status[0].alt = job.status;
+    if (status[0] && job.status !== status[0].title && job.status !== status[0].textContent) {
+        status[0].className = (typeof statusClass === "function")
+            ? statusClass(job.status)
+            : ("status-badge status-" + String(job.status || "").replace(/\s+/g, "-"));
         status[0].title = job.status;
+        status[0].textContent = job.status;
     }
     // Go through and update job values as needed
     updateContents($(`#jobId${job.job_id}_year`), job, "Year", job.year);
@@ -186,10 +197,11 @@ function updateJobItem(oldJob, job) {
     updateContents($(`#jobId${job.job_id}_video_type`), job, "Type",
         (typeof jobTypeLabel === "function") ? jobTypeLabel(job) : job.video_type);
     updateProgress(job, oldJob);
-    updateContents($(`#jobId${job.job_id}_RIPMETHOD`), job, "Rip Method", job.config.RIPMETHOD);
-    updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", job.config.MAINFEATURE);
-    updateContents($(`#jobId${job.job_id}_MINLENGTH`), job, "Min Length", job.config.MINLENGTH);
-    updateContents($(`#jobId${job.job_id}_MAXLENGTH`), job, "Max Length", job.config.MAXLENGTH);
+    const cfg = (typeof jobConfig === "function") ? jobConfig(job) : (job.config || {});
+    updateContents($(`#jobId${job.job_id}_RIPMETHOD`), job, "Rip Method", cfg.RIPMETHOD);
+    updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", cfg.MAINFEATURE);
+    updateContents($(`#jobId${job.job_id}_MINLENGTH`), job, "Min Length", cfg.MINLENGTH);
+    updateContents($(`#jobId${job.job_id}_MAXLENGTH`), job, "Max Length", cfg.MAXLENGTH);
 }
 
 /**
@@ -284,18 +296,6 @@ function refreshJobsSuccess(data, serverIndex, serverUrl, serverCount) {
     return serverCount;
 }
 
-function checkNotifications(data) {
-    $.each(data.notes, function (notifyIndex, note) {
-        if ($(`#toast${note.id}`).length) {
-            // Exists.
-            console.log("element exists, skipping add");
-        }else {
-            console.log(note);
-            addToast(note.title, note.message, note.id);
-        }
-    });
-}
-
 /**
  * Function set as an interval to update all jobs from api
  */
@@ -312,11 +312,8 @@ function refreshJobs() {
             success: function (data) {
                 serverCount = refreshJobsSuccess(data, serverIndex, serverUrl, serverCount);
             },
-            complete: function (data) {
+            complete: function () {
                 refreshJobsComplete();
-                if(typeof data !== 'undefined' && data.responseJSON) {
-                    checkNotifications(data.responseJSON);
-                }
             }
         });
     });

@@ -20,7 +20,7 @@ from flask.logging import default_handler  # noqa: F401
 from flask_login import current_user
 
 import arm.config.config as cfg
-from arm.config.config_utils import arm_yaml_test_bool
+from arm.config.config_utils import arm_yaml_test_bool, is_secret_setting_key, restore_masked_value, setting_value_as_text
 from arm.config import config_utils
 from arm.models.alembic_version import AlembicVersion
 from arm.models.job import Job
@@ -43,7 +43,8 @@ def database_updater(args, job, wait_time=90):
     job.method you want to change and the value being the new value.
     :param job: This is the job object
     :param wait_time: The time to wait in seconds
-    :returns : Boolean
+    :returns: True if the commit succeeded
+    :raises RuntimeError: if SQLite stays locked or another database error occurs
     """
     # Loop through our args and try to set any of our job variables
     for (key, value) in args.items():
@@ -64,7 +65,8 @@ def database_updater(args, job, wait_time=90):
                 raise RuntimeError(str(error)) from error
 
     app.logger.error(f"database is locked after {wait_time}s; update was not committed")
-    return False
+    db.session.rollback()
+    raise RuntimeError(f"database is locked after {wait_time}s; update was not committed")
 
 
 def check_db_version(install_path, db_file):
@@ -426,7 +428,7 @@ def setup_database():
         # Create default user to save problems with ui and ripper having diff setups
         hashed = bcrypt.gensalt(12)
         default_user = User(email="admin", password=bcrypt.hashpw("password".encode('utf-8'), hashed), hashed=hashed)
-        app.logger.debug("DB Init - Admin user loaded")
+        app.logger.warning("Created default admin user (admin/password). Change this password immediately.")
         db.session.add(default_user)
         # Server config
         server = SystemInfo()
@@ -654,13 +656,20 @@ def build_arm_cfg(form_data, comments):
     # It assumes the user isn't trying to mess with us.
     # This really should be hard coded.
     app.logger.debug("save_settings: START")
+    merged = dict(cfg.arm_config)
     for key, value in form_data.items():
-        # Skip the Cross Site Request Forgery (CSRF) token
         if key == "csrf_token":
             continue
-        # Strip whitespace from values to prevent issues with keys/values
-        if isinstance(value, str):
-            value = value.strip()
+        merged[key] = value
+    ordered_keys = list(cfg.arm_config.keys())
+    for key in form_data:
+        if key not in ordered_keys and key != "csrf_token":
+            ordered_keys.append(key)
+    for key in ordered_keys:
+        value = merged.get(key)
+        value = setting_value_as_text(value).strip()
+        if is_secret_setting_key(key):
+            value = restore_masked_value(value, cfg.arm_config.get(key))
         # Check if value contains "KEY" or "API" (any case)
         if re.search(r"_KEY|_API|_PASSWORD", key):
             key_value = "####--redacted--####"
@@ -704,11 +713,12 @@ def build_apprise_cfg(form_data):
         # Strip whitespace from values to prevent issues with keys/values
         if isinstance(value, str):
             value = value.strip()
-        # Check if value contains "KEY" or "API" (any case)
-        if re.search(r"KEY|API|PASS|TOKEN|SECRET", key):
-            key_value = "####--redacted--####"
-        else:
-            key_value = value
+        current = ""
+        if isinstance(cfg.apprise_config, dict):
+            current = cfg.apprise_config.get(key)
+        value = restore_masked_value(value, current)
+        # Do not log webhook URLs or tokens
+        key_value = "####--redacted--####"
         # Print output
         app.logger.debug(f"save_settings: [{key}] = {key_value} ")
 
@@ -892,75 +902,32 @@ def get_git_revision_short_hash() -> str:
 
 def git_check_updates(current_hash) -> bool:
     """
-    Check the ARM commit hash against the remote (GitHub) commit hash
-    :param
-        current_hash: str - string of current ARM commit hash
-    :return:
-        arm_current: Bool - True for no update (or exceptions), False for update possible
+    True means the UI should not show an update banner.
+
+    This fork versions independently of upstream automatic-ripping-machine/main
+    (2.24.x vs 2.6.x), so comparing hashes against that repo is always wrong.
     """
-    # GitHub API url - branch main
-    url = "https://api.github.com/repos/automatic-ripping-machine/automatic-ripping-machine/commits/main"
-    arm_current = True      # set True, any exceptions will return a true value
-
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise an error for HTTP failures (4xx, 5xx)
-
-        latest_commit = response.json().get("sha", "").strip()
-        if not latest_commit:
-            app.logger.error("Failed to retrieve latest commit hash from GitHub API.")
-
-        # Compare local and remote hashes
-        arm_current = latest_commit.startswith(current_hash)
-
-        app.logger.debug(f"Remote hash: {latest_commit}")
-        app.logger.debug(f"Local hash: {current_hash}")
-        app.logger.debug(f"ARM current: {arm_current}")
-
-    except requests.RequestException as e:
-        app.logger.error(f"GitHub API request failed: {e}")
-
-    return arm_current
+    app.logger.debug(f"Skipping upstream update check for local hash {current_hash}")
+    return True
 
 
 def git_check_version():
     """
-    Check the current ARM version locally against the remote (GitHub) version.
-
-    This function compares the installed ARM version with the latest version available
-    in the remote GitHub repository.
-
-    :return:
-        tuple: (local_version, remote_version)
-            - local_version (str): The version currently installed locally (from the VERSION file).
-            - remote_version (str): The latest version available in the remote repository.
+    Local VERSION only. Remote comparison against upstream is not used on this fork.
     """
-
+    local_version = "Unknown"
     install_path = cfg.arm_config['INSTALLPATH']
-
-    # Read the local version from the VERSION file
     version_file_path = os.path.join(install_path, 'VERSION')
     try:
         with open(version_file_path) as version_file:
-            local_version = version_file.read().strip()
+            local_version = version_file.read().strip() or "Unknown"
     except FileNotFoundError as e:
         app.logger.debug(f"Error - ARM Local Version file not found: {e}")
     except IOError as e:
         app.logger.debug(f"Error - ARM Local Version file error: {e}")
 
-    # Read the remote version from Git (without modifying local files)
-    try:
-        remote_version = subprocess.check_output(
-            'git show origin/HEAD:VERSION', shell=True, cwd=install_path
-        ).decode('ascii').strip()
-    except subprocess.CalledProcessError as e:
-        app.logger.debug(f"Error - ARM Remote Version error: {e}")
-        remote_version = "Unknown"
-
     app.logger.debug(f"Local version: {local_version}")
-    app.logger.debug(f"Remote version: {remote_version}")
-
-    return local_version, remote_version
+    return local_version, local_version
 
 
 def authenticated_state() -> bool:
@@ -985,3 +952,26 @@ def authenticated_state() -> bool:
             authenticated = True
 
     return authenticated
+
+
+def user_has_default_password(user, username="admin", default_password=b"password") -> bool:
+    """True when the stored user is still admin/password."""
+    if user is None:
+        return False
+    if (user.email or "") != username:
+        return False
+    stored = user.password
+    if stored is None:
+        return False
+    if isinstance(stored, str):
+        stored = stored.encode("utf-8")
+    try:
+        return bcrypt.checkpw(default_password, stored)
+    except (TypeError, ValueError):
+        try:
+            hashed = user.hash
+            if isinstance(hashed, str):
+                hashed = hashed.encode("utf-8")
+            return bcrypt.hashpw(default_password, hashed) == stored
+        except (TypeError, ValueError):
+            return False

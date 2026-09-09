@@ -230,7 +230,8 @@ class SystemDrives(db.Model):  # pylint: disable=too-many-instance-attributes
         try:
             arm_subprocess(cmd, check=True)
         except CalledProcessError as err:
-            return err.stderr
+            details = err.stderr or err.output or str(err)
+            return details or f"eject failed with code {err.returncode}"
         finally:
             self.release_current_job()
 

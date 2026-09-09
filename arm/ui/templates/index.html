@@ -28,20 +28,9 @@
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-sm-12 rounded text-center">
-                <img src="static/img/arm80.png" alt="Automatic Ripping Machine">
-                <p class="text-center">
-                <h2>Welcome to your Automatic Ripping Machine</h2>
-                </p>
-            </div>
-        </div>
-
         <div class="row h-100 mx-auto align-items-center">
             <div class="col-sm-12 mx-auto">
-                <p class="text-center">
-                <h5 class="text-center"><strong>Active Rips</strong></h5>
-                </p>
+                <h1 class="page-heading text-center">Active Rips</h1>
             </div>
         </div>
         <div class="row h-100 align-items-center">
@@ -51,17 +40,13 @@
         </div>
     </div>
 
-    <div class="row" style="height: 30px;"></div>
-    <p class="text-center">
-        <h5 class="text-center"><strong>System Information</strong></h5>
-    </p>
-    {% include 'settings/sysinfo.html' %}
-
     <script type="application/javascript" src="static/js/common.js"></script>
     <script type="application/javascript" src="static/js/jobRefresh.js"></script>
     <script type="application/javascript">
     $(document).ready(function () {
+        {% if authenticated %}
         const intervalId = window.setInterval(refreshJobs, {{ armui_cfg['index_refresh'] }});
+        {% endif %}
     });
 </script>
 {% endblock %}

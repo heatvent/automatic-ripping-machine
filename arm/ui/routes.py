@@ -23,12 +23,9 @@ from sqlalchemy.exc import SQLAlchemyError
 import arm.ui.utils as ui_utils
 from arm.ui import app, db, constants
 from arm.models.job import Job
-from arm.models.system_info import SystemInfo
 from arm.models.user import User
 import arm.config.config as cfg
 from arm.ui.forms import DBUpdate
-from arm.ui.settings.ServerUtil import ServerUtil
-from arm.ui.settings.settings import check_hw_transcode_support
 
 # This attaches the armui_cfg globally to let the users use any bootswatch skin from cdn
 armui_cfg = ui_utils.arm_db_cfg()
@@ -41,26 +38,19 @@ login_manager.init_app(app)
 @app.route('/')
 @app.route('/index.html')
 @app.route('/index')
+@login_required
 def home():
     """
-    The main homepage showing current rips and server stats
+    The main homepage showing current rips
     """
     # Check the database is current
     db_update = ui_utils.arm_db_check()
-    # Push out HW transcode status for the homepage
-    stats = {'hw_support': check_hw_transcode_support()}
     if not db_update["db_current"] or not db_update["db_exists"]:
         dbform = DBUpdate(request.form)
         app.logger.debug(f"Error with ARM DB: [{db_update['db_current']}]-[{db_update['db_exists']}]")
         return render_template("support/databaseupdate.html",
                                db_update=db_update,
                                dbform=dbform)
-
-    # Get system details from Server Info and Config
-    server = SystemInfo.query.filter_by(id="1").first()
-    serverutil = ServerUtil()
-    arm_path = cfg.arm_config['TRANSCODE_PATH']
-    media_path = cfg.arm_config['COMPLETED_PATH']
 
     # Page titles
     session["arm_name"] = cfg.arm_config['ARM_NAME']
@@ -84,9 +74,14 @@ def home():
     return render_template("index.html",
                            authenticated=authenticated,
                            jobs=jobs,
-                           children=cfg.arm_config['ARM_CHILDREN'],
-                           server=server, serverutil=serverutil,
-                           arm_path=arm_path, media_path=media_path, stats=stats)
+                           children=cfg.arm_config['ARM_CHILDREN'])
+
+
+@app.route('/help')
+def help_page():
+    """In-app documentation for using ARM."""
+    session["page_title"] = "Help"
+    return render_template("help.html")
 
 
 @app.route('/error')

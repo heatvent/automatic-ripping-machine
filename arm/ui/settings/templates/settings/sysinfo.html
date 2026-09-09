@@ -1,4 +1,5 @@
 {% block sysinfo %}
+    {% from 'macros/icons.html' import info_icon, status_badge %}
     <style>
         .progress-bar {
             color: white !important;
@@ -6,7 +7,7 @@
     </style>
     <div class="container content">
         <div class="row">
-            <div class="col pt-3">
+            <div class="col pt-3" id="sys-cpu">
                 <div class="card mx-auto">
                     <div class="card-header text-center">
                         <strong>System</strong>
@@ -44,7 +45,7 @@
                     </ul>
                 </div>
             </div>
-            <div class="col pt-3">
+            <div class="col pt-3" id="sys-memory">
                 <div class="card mx-auto">
                     <div class="card-header text-center">
                         <strong>System Memory</strong>
@@ -70,7 +71,7 @@
                     </ul>
                 </div>
             </div>
-            <div class="col pt-3">
+            <div class="col pt-3" id="sys-storage">
                 <div class="card mx-auto">
                     <div class="card-header text-center">
                         <strong>Storage</strong>
@@ -118,57 +119,51 @@
         </div>
         <div class="row">
             <div class="col pt-3"></div>
-            <div class="col pt-3">
+            <div class="col pt-3" id="sys-hw-transcode">
                 <div class="card mx-auto">
                     <div class="card-header text-center">
                         <strong>Hardware Transcoding Support</strong>
                     </div>
                     <ul class="list-group list-group-flush">
+                        {% if stats['hw_support'].get('skipped') %}
+                        <li class="list-group-item text-center">
+                            Probe skipped because SKIP_TRANSCODE is true.
+                        </li>
+                        {% else %}
                         <!-- INTEL -->
                         <li class="list-group-item text-center">
                             Intel QuickSync: {% if stats['hw_support']['intel'] %}
-                            <img src="{{ url_for('static', filename='img/success.png') }}"
-                                 alt="update image" width="20px" height="20px">
+                            {{ status_badge('yes') }}
                         {% else %}
-                            <img src="{{ url_for('static', filename='img/fail.png') }}"
-                                 alt="update image" width="20px" height="20px">
+                            {{ status_badge('no') }}
                             <a href="https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/"
                                target=”_blank”>
-                                <img title="Get Help from the wiki!"
-                                     src="{{ url_for('static', filename='img/info.png') }}" width="20px"
-                                     height="20px" alt="Get Help from the wiki!"></a>
+                                {{ info_icon(title="Get help from the wiki") }}</a>
                         {% endif %}
                         </li>
                         <!-- NVIDIA -->
                         <li class="list-group-item text-center">
                             Nvidia NVENC:{% if stats['hw_support']['nvidia'] %}
-                            <img src="{{ url_for('static', filename='img/success.png') }}"
-                                 alt="update image" width="20px" height="20px">
+                            {{ status_badge('yes') }}
                         {% else %}
-                            <img src="{{ url_for('static', filename='img/fail.png') }}"
-                                 alt="update image" width="20px" height="20px">
+                            {{ status_badge('no') }}
                             <a href="https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/"
                                target=”_blank”>
-                                <img title="Get Help from the wiki!"
-                                     src="{{ url_for('static', filename='img/info.png') }}" width="20px"
-                                     height="20px" alt="Get Help from the wiki!"></a>
+                                {{ info_icon(title="Get help from the wiki") }}</a>
                         {% endif %}
                         </li>
                         <!-- AMD -->
                         <li class="list-group-item text-center">
                             AMD VCN:{% if stats['hw_support']['amd'] %}
-                            <img src="{{ url_for('static', filename='img/success.png') }}"
-                                 alt="update image" width="20px" height="20px">
+                            {{ status_badge('yes') }}
                         {% else %}
-                            <img src="{{ url_for('static', filename='img/fail.png') }}"
-                                 alt="update image" width="20px" height="20px">
+                            {{ status_badge('no') }}
                             <a href="https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/"
                                target=”_blank”>
-                                <img title="Get Help from the wiki!"
-                                     src="{{ url_for('static', filename='img/info.png') }}" width="20px"
-                                     height="20px" alt="Get Help from the wiki!"></a>
+                                {{ info_icon(title="Get help from the wiki") }}</a>
                         {% endif %}
                         </li>
+                        {% endif %}
                     </ul>
                 </div>
             </div>

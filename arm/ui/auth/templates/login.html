@@ -3,7 +3,7 @@
 {% block content %} 
 <div class="container">
     <div class="row h-100 mx-auto align-items-center">
-		<div class="col-sm-4 mx-auto" style="flex-wrap: nowrap">
+		<div class="col-sm-4 mx-auto login-panel">
 			<form id="form1" name="form1" method="post" action="login">
 				{{ form.hidden_tag() }}
 				<div class="input-group mb-3">
@@ -25,9 +25,12 @@
 					{% endfor %}
 				</div>
 				<input class="form-control" name="save" value="save" hidden>
-				<button class="btn btn-secondary btn-lg btn-block" form="form1" type="submit">Login</button>
+				<button class="btn btn-primary btn-lg btn-block" form="form1" type="submit">Login</button>
 			</form>
 		</div>
     </div>
 </div>
+{% endblock %}
+{% block js %}
+<script>activeTab("login");</script>
 {% endblock %}

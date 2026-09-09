@@ -20,6 +20,13 @@ shutdown_requested = False
 def startup():
     """ARM UI Startup check on database config"""
     db_update = arm.ui.utils.arm_db_check()
+    if db_update["db_exists"] and not db_update["db_current"]:
+        app.logger.info("Database schema is out of date; running automatic migration.")
+        try:
+            arm.ui.utils.arm_db_migrate()
+            db_update = arm.ui.utils.arm_db_check()
+        except Exception as error:  # noqa: BLE001
+            app.logger.error("Automatic database migration failed: %s", error, exc_info=True)
     if db_update["db_current"]:
         app.logger.info("Updating Optical Drives")
         arm.ui.settings.DriveUtils.drives_update(startup=True)

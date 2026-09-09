@@ -16,6 +16,18 @@ from arm.models.job import JobState
 PROCESS_COMPLETE = "FFMPEG processing complete"
 
 
+def _ensure_output_dir(path, mode=0o777):
+    """Create path and set permissions without a shell."""
+    os.makedirs(path, exist_ok=True)
+    os.chmod(path, mode)
+    for root, dirs, files in os.walk(path):
+        for name in dirs + files:
+            try:
+                os.chmod(os.path.join(root, name), mode)
+            except OSError:
+                pass
+
+
 def ffmpeg_sleep_check(job):
     """
     Wait until there is a spot to transcode (FFmpeg variant).
@@ -64,10 +76,15 @@ def probe_source(src_path):
     focus on parsing and error handling.
     """
 
-    cmd = f"ffprobe -v error -print_format json -show_format -show_streams {shlex.quote(src_path)}"
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-print_format", "json",
+        "-show_format", "-show_streams",
+        src_path,
+    ]
     logging.debug(f"FFProbe command: {cmd}")
     try:
-        out = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('utf-8')
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf-8')
         logging.debug(f"ffprobe output: {out}")
         return out
     except subprocess.CalledProcessError as e:
@@ -221,10 +238,8 @@ def ffmpeg_main_feature(src_path, out_path, job):
     logging.debug("FFMPEG starting: ")
     logging.debug(f"\n\r{job.pretty_table()}")
 
-    utils.database_updater({'status': "waiting_transcode"}, job)
+    utils.database_updater({'status': JobState.TRANSCODE_WAITING.value}, job)
     ffmpeg_sleep_check(job)
-    logging.debug("Setting job status to 'transcoding'")
-    utils.database_updater({'status': "transcoding"}, job)
 
     # Prepare output filename
     filename = os.path.join(job.title + "." + cfg.arm_config["DEST_EXT"])
@@ -247,8 +262,7 @@ def ffmpeg_main_feature(src_path, out_path, job):
 
     try:
         # Create the output directory if it doesn't exist
-        subprocess.check_output((f"mkdir -p {shlex.quote(out_path)} "
-                                 f"&& chmod -R 777 {shlex.quote(out_path)}"), shell=True)
+        _ensure_output_dir(out_path)
         # Transcode the main feature
         run_transcode_cmd(src_path, out_file_path, job)
         logging.info("FFMPEG call successful")
@@ -340,11 +354,7 @@ def ffmpeg_default(src_path, base_path, job):
     :return: None
     """
     # Wait until there is a spot to transcode (if amount of simultaneous transcodes are limited)
-    job.status = "waiting_transcode"
-    db.session.commit()
     ffmpeg_sleep_check(job)
-    job.status = "transcoding"
-    db.session.commit()
 
     # This will fail if the directory raw gets deleted
     for file in os.listdir(src_path):
@@ -413,11 +423,7 @@ def ffmpeg_mkv(src_path, base_path, job):
     :return: None
     """
     # Added to limit number of transcodes
-    job.status = "waiting_transcode"
-    db.session.commit()
     ffmpeg_sleep_check(job)
-    job.status = "transcoding"
-    db.session.commit()
 
     # This will fail if the directory raw gets deleted
     for files in os.listdir(src_path):
@@ -443,8 +449,7 @@ def ffmpeg_mkv(src_path, base_path, job):
 
         try:
             # Making the output directory if it doesn't exist
-            subprocess.check_output((f"mkdir -p {shlex.quote(base_path)} "
-                                     f"&& chmod -R 777 {shlex.quote(base_path)}"), shell=True)
+            _ensure_output_dir(base_path)
 
             # Actually transcoding the file to the output location & updating the db with the status
             run_transcode_cmd(src_files_path, file_path_name, job)
@@ -481,9 +486,14 @@ def run_transcode_cmd(src_file, out_file, job, ff_pre_args="", ff_post_args=""):
     total_duration = 0
     try:
         duration_sec_str = subprocess.check_output(
-            f"ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "
-            f"{shlex.quote(src_file)}",
-            shell=True, stderr=subprocess.STDOUT).decode('utf-8').strip()
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                src_file,
+            ],
+            stderr=subprocess.STDOUT,
+        ).decode('utf-8').strip()
         total_duration = int(float(duration_sec_str) * 1_000_000)
     except (subprocess.CalledProcessError, ValueError) as e:
         logging.error(f"Could not get duration from ffprobe: {e}")

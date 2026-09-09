@@ -67,6 +67,10 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         logging.info("************* Ripping with MakeMKV completed *************")
         # point HB/FFMPEG to the path MakeMKV ripped to
         transcode_in_path = makemkv_out_path
+        # Disc is on disk now; free the tray before transcode/move/post-processing.
+        logging.info("MakeMKV finished; ejecting disc so the drive can accept the next job.")
+        job.eject()
+        logging.info("Drive released; transcode and post-processing continue without occupying the tray.")
     # Begin transcoding section - only transcode if skip_transcode is false
     start_transcode(job, logfile, transcode_in_path, transcode_out_path, protection)
 
@@ -117,9 +121,7 @@ def start_transcode(job, logfile, raw_in_path, transcode_out_path, protection):
         logging.info("Transcoding is disabled, skipping transcode")
         return None
 
-    # Update db with transcoding status
-    utils.database_updater({'status': "transcoding"}, job)
-    # Use FFMPEG or HandBrake depending on arm.yaml setting
+    # HandBrake/FFmpeg sleep_check sets waiting_transcode, then transcoding.
     if job.config.USE_FFMPEG:
         logging.info("************* Starting Transcode With FFMPEG *************")
         # If it was ripped with MakeMKV or we are doing a mkv rip then run the ffmpeg_mkv function
@@ -137,8 +139,6 @@ def start_transcode(job, logfile, raw_in_path, transcode_out_path, protection):
             ffmpeg.ffmpeg_all(raw_in_path, transcode_out_path, job)
             db.session.commit()
         logging.info("************* Finished Transcode With FFMPEG *************")
-        # After transcoding update db status back to active
-        utils.database_updater({'status': "active"}, job)
         return True
 
     elif not job.config.USE_FFMPEG:
@@ -158,8 +158,6 @@ def start_transcode(job, logfile, raw_in_path, transcode_out_path, protection):
             handbrake.handbrake_all(raw_in_path, transcode_out_path, logfile, job)
             db.session.commit()
         logging.info("************* Finished Transcode With HandBrake *************")
-        # After transcoding update db status back to active
-        utils.database_updater({'status': "active"}, job)
         return True
     else:
         logging.info("Invalid transcoding option selected. Skipping transcode."
@@ -176,7 +174,7 @@ def notify_exit(job):
     """
     if job.config.NOTIFY_TRANSCODE:
         if job.errors:
-            errlist = ', '.join(job.errors)
+            errlist = utils.format_job_errors(job.errors)
             utils.notify(job, constants.NOTIFY_TITLE,
                          f" {job.title} processing completed with errors. "
                          f"Title(s) {errlist} failed to complete. ")

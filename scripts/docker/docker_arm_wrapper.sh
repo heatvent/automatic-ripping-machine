@@ -19,29 +19,42 @@ set -a && source /etc/environment && set +a
 # Log Discovered Type and Start Rip
 #######################################################################################
 
+# No disc in the tray: leave before logging a start line.
+if [ "$ID_CDROM_MEDIA" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_DVD" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_BD" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_CD" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_CD_R" != "1" ] \
+   && [ "$ID_CDROM_MEDIA_CD_RW" != "1" ] \
+   && [ -z "$ID_FS_TYPE" ]; then
+    echo "[ARM] No disc present on ${DEVNAME}; skipping ripper start" | logger -t ARM -s
+    echo "$(date) [ARM] No disc present on ${DEVNAME}; skipping ripper start" >> "$ARMLOG"
+    exit 0
+fi
+
 # ID_CDROM_MEDIA_BD = Bluray
 # ID_CDROM_MEDIA_CD = CD
 # ID_CDROM_MEDIA_DVD = DVD
+# Audio track count / FS type must be checked before CD-R so a data CD-R
+# is not started as music.
 if [ "$ID_CDROM_MEDIA_DVD" == "1" ]; then
     echo "$(date) [ARM] Starting ARM for DVD on ${DEVNAME}" >> "$ARMLOG"
     echo "[ARM] Starting ARM for DVD on ${DEVNAME}" | logger -t ARM -s
 elif [ "$ID_CDROM_MEDIA_BD" == "1" ]; then
 	  echo "[ARM] Starting ARM for Bluray on ${DEVNAME}" >> "$ARMLOG"
-	  echo "$(date) [[ARM] Starting ARM for Bluray on ${DEVNAME}" | logger -t ARM -s
-elif [ "$ID_CDROM_MEDIA_CD" == "1" ] || [ "$ID_CDROM_MEDIA_CD_R" == "1" ] || [ "$ID_CDROM_MEDIA_CD_RW" == "1" ]; then
+	  echo "$(date) [ARM] Starting ARM for Bluray on ${DEVNAME}" | logger -t ARM -s
+elif [ -n "$ID_CDROM_MEDIA_TRACK_COUNT_AUDIO" ]; then
 	  echo "[ARM] Starting ARM for CD on ${DEVNAME}" | logger -t ARM -s
-	  echo "$(date) [[ARM] Starting ARM for CD on ${DEVNAME}" >> "$ARMLOG"
+	  echo "$(date) [ARM] Starting ARM for CD on ${DEVNAME}" >> "$ARMLOG"
 elif [ "$ID_FS_TYPE" != "" ]; then
 	  echo "[ARM] Starting ARM for Data Disk on ${DEVNAME} with File System ${ID_FS_TYPE}" | logger -t ARM -s
-	  echo "$(date) [[ARM] Starting ARM for Data Disk on ${DEVNAME} with File System ${ID_FS_TYPE}" >> "$ARMLOG"
+	  echo "$(date) [ARM] Starting ARM for Data Disk on ${DEVNAME} with File System ${ID_FS_TYPE}" >> "$ARMLOG"
+elif [ "$ID_CDROM_MEDIA_CD" == "1" ] || [ "$ID_CDROM_MEDIA_CD_R" == "1" ] || [ "$ID_CDROM_MEDIA_CD_RW" == "1" ]; then
+	  echo "[ARM] Starting ARM for CD on ${DEVNAME}" | logger -t ARM -s
+	  echo "$(date) [ARM] Starting ARM for CD on ${DEVNAME}" >> "$ARMLOG"
 else
 	  echo "[ARM] Starting ARM for unknown disc type on ${DEVNAME}" | logger -t ARM -s
 	  echo "$(date) [ARM] Starting ARM for unknown disc type on ${DEVNAME}" >> "$ARMLOG"
-    if [[ "$ID_CDROM_MEDIA" != "1" ]]; then
-        echo "[ARM] No disc present on ${DEVNAME}; skipping ripper start" | logger -t ARM -s
-        echo "$(date) [ARM] No disc present on ${DEVNAME}; skipping ripper start" >> "$ARMLOG"
-        exit 0
-    fi
 fi
 cd /home/arm
 python3 /opt/arm/arm/ripper/main.py -d "${DEVNAME}" | logger -t ARM -s

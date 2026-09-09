@@ -88,7 +88,12 @@ function switchDelete() {
 }
 
 function switchAbandon() {
-    $("#status" + activeJob).attr("src", "static/img/fail.png");
+    const el = document.getElementById("status" + activeJob);
+    if (el) {
+        el.textContent = "fail";
+        el.className = "status-badge status-fail";
+        el.title = "fail";
+    }
     $(MSG_1_ID).html("Job was successfully abandoned");
     hideModal();
     setTimeout(

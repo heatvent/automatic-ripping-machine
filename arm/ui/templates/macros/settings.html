@@ -1,0 +1,85 @@
+{% from 'macros/icons.html' import info_icon %}
+
+{% macro setting_caption(key, label) %}
+<div class="input-group-prepend setting-caption">
+    <span class="input-group-text" id="{{ key }}">
+        <span class="setting-name">{{ label }}</span>
+        <span class="setting-key">{{ key }}</span>
+    </span>
+</div>
+{% endmacro %}
+
+{% macro setting_info(key, help_text, label=None) %}
+<a class="popovers" onClick="return false;" href=""
+   data-content="{{ help_text|replace('#', '\n') }}"
+   rel="popover"
+   data-placement="top"
+   data-original-title="{{ label or key }}">
+    {{ info_icon() }}
+</a>
+{% endmacro %}
+
+{% macro setting_error(key) %}
+<div class="invalid-feedback d-block setting-error" id="err-{{ key }}" hidden></div>
+{% endmacro %}
+
+{% macro yaml_settings_form(form_id, groups, submit_label, read_only, id_prefix) %}
+<form id="{{ form_id }}" name="{{ form_id }}" method="post" action="" novalidate>
+    {{ form.hidden_tag() }}
+    {% for group_id, group_title, group_keys in groups %}
+    <section class="settings-section" id="{{ id_prefix }}-{{ group_id }}">
+        <h5>{{ group_title }}</h5>
+        {% for k in group_keys %}
+            {% set v = settings[k] %}
+            <div class="setting-block">
+            <div class="input-group mb-1">
+                {{ setting_caption(k, setting_label(k)) }}
+                {% if k in boolean_setting_keys %}
+                    <select class="form-control custom-select" aria-label="{{ k }}" name="{{ k }}"
+                            {% if read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                        <option value="true"{% if v|as_bool %} selected{% endif %}>Yes</option>
+                        <option value="false"{% if not v|as_bool %} selected{% endif %}>No</option>
+                    </select>
+                {% elif k in enum_setting_choices %}
+                    <select class="form-control custom-select" aria-label="{{ k }}" name="{{ k }}"
+                            {% if read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                        {% for opt, opt_label in enum_setting_choices[k] %}
+                            <option value="{{ opt }}"{% if v|string == opt %} selected{% endif %}>{{ opt_label }}</option>
+                        {% endfor %}
+                        {% set enum_vals = enum_setting_values[k] %}
+                        {% if v|string not in enum_vals %}
+                            <option value="{{ v }}" selected>{{ v }} (current)</option>
+                        {% endif %}
+                    </select>
+                {% elif k in integer_setting_keys %}
+                    <input type="number" class="form-control" aria-label="{{ k }}" name="{{ k }}"
+                           value="{{ v }}" inputmode="numeric"
+                           {% if k in port_setting_keys %}min="1" max="65535"{% else %}min="0"{% endif %}
+                           {% if read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                {% elif k == 'CHMOD_VALUE' %}
+                    <input type="text" class="form-control" aria-label="{{ k }}" name="{{ k }}"
+                           value="{{ v }}" pattern="[0-7]{3,4}" maxlength="4"
+                           {% if read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                {% else %}
+                    <input type="{% if k in secret_setting_keys %}password{% else %}text{% endif %}"
+                           class="form-control" aria-label="{{ k }}" name="{{ k }}"
+                           placeholder="{% if k in secret_setting_keys %}unchanged{% else %}{{ v }}{% endif %}"
+                           value="{% if k in secret_setting_keys %}{{ v|mask_last }}{% else %}{{ v }}{% endif %}"
+                           aria-describedby="{{ k }}"
+                           autocomplete="{% if k in secret_setting_keys %}off{% else %}on{% endif %}"
+                           {% if read_only %}
+                             disabled="" title="arm.yaml is read-only"
+                           {% endif %}>
+                {% endif %}
+                {{ setting_info(k, jsoncomments.get(k) or 'No description is available for this setting.', setting_label(k)) }}
+            </div>
+            <div class="invalid-feedback setting-error" data-error-for="{{ k }}" hidden></div>
+            </div>
+        {% endfor %}
+    </section>
+    {% endfor %}
+    <button class="btn btn-secondary btn-lg btn-block" form="{{ form_id }}"
+            type="submit"{% if read_only %} disabled{% endif %}>{{ submit_label }}
+    </button>
+</form>
+{% endmacro %}

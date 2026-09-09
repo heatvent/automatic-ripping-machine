@@ -57,15 +57,13 @@ class JobState(str, enum.Enum):
     FAILURE = "fail"
 
     # Manual wait (see job.config.MANUAL_WAIT)
-    MANUAL_WAIT_STARTED = "waiting"
+    MANUAL_WAIT_STARTED = "waiting_manual"
 
     # Job Initialized or Pending
     IDLE = "active"
     """An Idle Job may proceed to ripping or to finished.
 
     - When initializing a job, the job is set to active
-    - After Handbrake finishes, Job is set to active
-    - After ABCD finishes, Job is set to active
     """
 
     # Video Ripping States
@@ -91,7 +89,7 @@ JOB_STATUS_FINISHED = {
 JOB_STATUS_RIPPING = {
     JobState.AUDIO_RIPPING,
     JobState.VIDEO_RIPPING,
-    JobState.MANUAL_WAIT_STARTED,  # <-- not ripping, but undistinguishable
+    JobState.MANUAL_WAIT_STARTED,
     JobState.VIDEO_WAITING,
     JobState.VIDEO_INFO,
 }
@@ -99,6 +97,65 @@ JOB_STATUS_TRANSCODING = {
     JobState.TRANSCODE_ACTIVE,
     JobState.TRANSCODE_WAITING,
 }
+
+
+def job_has_terminal_status(status):
+    """True when status is already success or failure."""
+    try:
+        return JobState(status) in JOB_STATUS_FINISHED
+    except (TypeError, ValueError):
+        return False
+
+
+def job_holds_drive(job):
+    """True if this job still needs exclusive access to the optical drive."""
+    if job is None:
+        return False
+    if getattr(job, "ejected", False):
+        return False
+    try:
+        state = JobState(job.status)
+    except (TypeError, ValueError):
+        return True
+    if state in JOB_STATUS_FINISHED or state in JOB_STATUS_TRANSCODING:
+        return False
+    return True
+
+
+def udev_flag_set(props, key):
+    """True when a udev property is present as 1/'1'."""
+    return str(props.get(key, "")).strip() == "1"
+
+
+def classify_disc_from_udev(props):
+    """Pick disc type from udev properties without depending on dict order.
+
+    Audio track count and DVD/BD flags win. A filesystem type (iso9660/udf)
+    means data, even on a CD-R. CD/CD-R/CD-RW only become music when there
+    is no data filesystem.
+    """
+    label = props.get("ID_FS_LABEL") or None
+    if udev_flag_set(props, "ID_CDROM_MEDIA_BD"):
+        return "bluray", label
+    if udev_flag_set(props, "ID_CDROM_MEDIA_DVD"):
+        return "dvd", label
+    if props.get("ID_CDROM_MEDIA_TRACK_COUNT_AUDIO"):
+        return "music", label
+    fs_type = props.get("ID_FS_TYPE")
+    if fs_type:
+        return "data", label or fs_type
+    if (udev_flag_set(props, "ID_CDROM_MEDIA_CD")
+            or udev_flag_set(props, "ID_CDROM_MEDIA_CD_R")
+            or udev_flag_set(props, "ID_CDROM_MEDIA_CD_RW")):
+        return "music", label
+    return "unknown", label
+
+
+def serialize_model_value(value):
+    """Keep None as None so the UI does not treat the string 'None' as data."""
+    if value is None:
+        return None
+    return str(value)
 
 
 class Job(db.Model):
@@ -194,26 +251,13 @@ class Job(db.Model):
         context = pyudev.Context()
         device = pyudev.Devices.from_device_file(context, self.devpath)
         self.disctype = "unknown"
-
-        for key, value in device.items():
+        props = dict(device.items())
+        for key, value in props.items():
             logging.debug(f"pyudev: {key}: {value}")
-            if key == "ID_FS_LABEL":
-                self.label = value
-                if value == "iso9660":
-                    self.disctype = "data"
-            elif key == "ID_CDROM_MEDIA_BD":
-                self.disctype = "bluray"
-            elif key == "ID_CDROM_MEDIA_DVD":
-                self.disctype = "dvd"
-            elif key == "ID_CDROM_MEDIA_TRACK_COUNT_AUDIO":
-                self.disctype = "music"
-            elif key in ("ID_CDROM_MEDIA_CD", "ID_CDROM_MEDIA_CD_R", "ID_CDROM_MEDIA_CD_RW"):
-                # udev reports recordable audio discs as CD_R/CD_RW, not MEDIA_CD.
-                # Do not override a more specific type already found (dvd/bluray/data).
-                if value == "1" and self.disctype == "unknown":
-                    self.disctype = "music"
-            else:
-                continue
+        disc_type, label = classify_disc_from_udev(props)
+        self.disctype = disc_type
+        if label:
+            self.label = label
 
     def get_pid(self):
         """
@@ -231,10 +275,7 @@ class Job(db.Model):
         :param found_hvdvd_ts:  gets pushed in from utils - saves importing utils
         :return: None
         """
-        if self.disctype == "music":
-            logging.debug("Disc is music.")
-            self.label = music_brainz.main(self)
-        elif _disc_dir_exists(self.mountpoint, "AUDIO_TS") and _listdir_safe(self.mountpoint + "/AUDIO_TS"):
+        if _disc_dir_exists(self.mountpoint, "AUDIO_TS") and _listdir_safe(self.mountpoint + "/AUDIO_TS"):
             logging.debug(f"Found: {self.mountpoint}/AUDIO_TS")
             self.disctype = "data"
         elif _disc_dir_exists(self.mountpoint, "VIDEO_TS"):
@@ -249,6 +290,12 @@ class Job(db.Model):
         elif found_hvdvd_ts:
             logging.debug("Found file: HVDVD_TS")
             # do something here too
+        elif self.disctype == "music":
+            logging.debug("Disc is music.")
+            if self.hasnicetitle:
+                logging.debug("MusicBrainz already identified this disc; skipping a second query.")
+            else:
+                self.label = music_brainz.main(self)
         else:
             logging.debug("Did not find valid dvd/bd files. Changing disc-type to 'data'")
             self.disctype = "data"
@@ -261,17 +308,12 @@ class Job(db.Model):
 
         return - only the logfile - setup_logging() adds the full path
         """
-        # Use the music label if we can find it - defaults to music_cd.log
-        disc_id = music_brainz.get_disc_id(self)
-        logging.debug(f"music_id: {disc_id}")
-        mb_title = music_brainz.get_title(disc_id, self)
-        logging.debug(f"mm_title: {mb_title}")
-
-        if mb_title == "not identified":
-            self.label = self.title = mb_title
+        mb_title = music_brainz.main(self)
+        if not mb_title:
+            self.label = self.title = "not identified"
             return "music_cd"
-        else:
-            return mb_title
+        self.label = mb_title
+        return mb_title.replace("/", "_")
 
     def pretty_table(self):
         """Returns a string of the prettytable"""
@@ -293,24 +335,55 @@ class Job(db.Model):
         return_dict = {}
         for key, value in self.__dict__.items():
             if '_sa_instance_state' not in key:
-                return_dict[str(key)] = str(value)
+                return_dict[str(key)] = serialize_model_value(value)
         return return_dict
 
-    def eject(self):
-        """Eject disc if it hasn't previously been ejected
+    def eject(self, retries=5, delay=2):
+        """Eject disc if it hasn't previously been ejected.
+
+        Retries on busy/transient failures (common in VMware passthrough).
+        Physical eject failure still leaves ejected=False so later callers
+        can try again; the drive job is released by SystemDrives.eject().
         """
         if self.ejected:
             logging.debug("The drive associated with this job has already been ejected.")
             return
         if self.drive is None:
             logging.warning("No drive was backpopulated with this job!")
+            if not cfg.arm_config['AUTO_EJECT']:
+                logging.info("Skipping auto eject")
+                self.ejected = False
+                return
+            try:
+                subprocess.run(
+                    ["eject", "--verbose", "--cdrom", "--scsi", self.devpath],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+            except OSError as err:
+                logging.error(f"Unable to eject {self.devpath} without a drive row: {err}")
+                return
+            self.ejected = True
             return
         if not cfg.arm_config['AUTO_EJECT']:
             logging.info("Skipping auto eject")
             self.drive.release_current_job()  # release job without ejecting
             return
-        self.drive.eject()
-        self.ejected = True
+
+        last_error = None
+        for attempt in range(1, retries + 1):
+            last_error = self.drive.eject()
+            if not last_error:
+                self.ejected = True
+                logging.info(f"Ejected {self.devpath} on attempt {attempt}/{retries}")
+                return
+            logging.warning(
+                f"Eject attempt {attempt}/{retries} failed for {self.devpath}: {last_error}"
+            )
+            if attempt < retries:
+                time.sleep(delay)
+        logging.error(f"Unable to eject {self.devpath} after {retries} attempts: {last_error}")
 
     @hybrid_property
     def finished(self):

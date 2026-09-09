@@ -25,7 +25,7 @@ if find_spec("arm") is None:
 
 import arm.config.config as cfg  # noqa E402
 from arm.models.config import Config  # noqa: E402
-from arm.models.job import Job, JobState  # noqa: E402
+from arm.models.job import Job, JobState, job_has_terminal_status  # noqa: E402
 from arm.models.system_drives import SystemDrives  # noqa: E402
 from arm.ripper import (arm_ripper, identify, logger,  # noqa: E402
                         music_brainz, utils)
@@ -76,8 +76,8 @@ def log_arm_params(job):
     for key in ("SKIP_TRANSCODE", "MAINFEATURE", "MINLENGTH", "MAXLENGTH",
                 "VIDEOTYPE", "MANUAL_WAIT", "MANUAL_WAIT_TIME", "RIPMETHOD",
                 "MKV_ARGS", "DELRAWFILES", "HB_PRESET_DVD", "HB_PRESET_BD",
-                "HB_ARGS_DVD", "HB_ARGS_BD", "FFMPEG_CLI", "FFMPEG_LOCAL", "USE_FFMPEG",
-                "FFMPEG_ARGS", "RAW_PATH", "TRANSCODE_PATH",
+                "HB_ARGS_DVD", "HB_ARGS_BD",                 "FFMPEG_CLI", "FFMPEG_LOCAL", "USE_FFMPEG",
+                "FFMPEG_PRE_FILE_ARGS", "FFMPEG_POST_FILE_ARGS", "RAW_PATH", "TRANSCODE_PATH",
                 "COMPLETED_PATH", "EXTRAS_SUB", "EMBY_REFRESH", "EMBY_SERVER",
                 "EMBY_PORT", "NOTIFY_RIP", "NOTIFY_TRANSCODE",
                 "MAX_CONCURRENT_TRANSCODES", "MAX_CONCURRENT_MAKEMKVINFO"):
@@ -130,30 +130,45 @@ def main():
 
     # Type: Music
     elif job.disctype == "music":
-        # Try to recheck music disc for auto ident
-        music_brainz.main(job)
+        # Identify once; get_disc_type / logfile setup may already have queried MusicBrainz.
+        if not job.hasnicetitle:
+            music_brainz.main(job)
         if utils.rip_music(job, log_file):
+            # abcde is done with the disc; free the tray before notify/Emby work.
+            job.eject()
             utils.notify(job, constants.NOTIFY_TITLE, f"Music CD: {job.title} {constants.PROCESS_COMPLETE}")
             utils.scan_emby()
-            # This shouldn't be needed. but to be safe
             job.status = JobState.SUCCESS.value
             db.session.commit()
         else:
             logging.critical("Music rip failed.  See previous errors.  Exiting. ")
             job.status = JobState.FAILURE.value
             db.session.commit()
+            job.eject()
 
     # Type: Data
     elif job.disctype == "data":
         logging.info("Disc identified as data")
         if utils.rip_data(job):
+            job.eject()
             utils.notify(job, constants.NOTIFY_TITLE, f"Data disc: {job.label} copying complete. ")
+            job.status = JobState.SUCCESS.value
+            db.session.commit()
         else:
             logging.critical("Data rip failed.  See previous errors.  Exiting.")
+            job.status = JobState.FAILURE.value
+            if not job.errors:
+                job.errors = "Data rip failed"
+            db.session.commit()
+            job.eject()
 
     # Type: undefined
     else:
         logging.critical("Couldn't identify the disc type. Exiting without any action.")
+        job.status = JobState.FAILURE.value
+        job.errors = "Couldn't identify the disc type"
+        db.session.commit()
+        job.eject()
 
 
 def setup():
@@ -191,28 +206,24 @@ def setup():
         raise utils.RipperException(f"Timed out waiting for drive to be ready (ioctl tray status: {drive.tray}).")
 
     # ARM Job starts
-    # Create new job
+    # Claim the drive before any slow identification so a second udev event cannot pass.
+    utils.duplicate_run_check(devpath)
     job = Job(devpath)
-    # Setup logging
-    log_file = logger.setup_job_log(job)
+    job.status = JobState.IDLE.value
+    job.start_time = datetime.datetime.now()
+    utils.database_adder(job)
+    time.sleep(1)
+    drive_utils.update_drive_job(job)
 
     # Capture and report the ARM Info
     arminfo = ARMInfo(cfg.arm_config["INSTALLPATH"], cfg.arm_config['DBFILE'])
     job.arm_version = arminfo.arm_version
     arminfo.get_values()
 
-    # Sometimes drives trigger twice this stops multi runs from 1 udev trigger
-    utils.duplicate_run_check(devpath)
+    # Setup logging (audio CDs may query MusicBrainz here)
+    log_file = logger.setup_job_log(job)
 
     logging.info(f"************* Starting ARM processing at {datetime.datetime.now()} *************")
-    # Set job status and start time
-    job.status = JobState.IDLE.value
-    job.start_time = datetime.datetime.now()
-    utils.database_adder(job)
-    # Sleep to lower chances of db locked - unlikely to be needed
-    time.sleep(1)
-    # Associate the job with the drive in the database
-    drive_utils.update_drive_job(job)
     # Add the job.config to db
     config = Config(cfg.arm_config, job_id=job.job_id)  # noqa: F811
     # Check if the drive mode is set to manual, and load to the job config for later use
@@ -269,7 +280,7 @@ if __name__ == "__main__":
             )
         # Possibly add cleanup section here for failed job files
     else:
-        if job:
+        if job and not job_has_terminal_status(job.status):
             job.status = JobState.SUCCESS.value
     finally:
         if job:

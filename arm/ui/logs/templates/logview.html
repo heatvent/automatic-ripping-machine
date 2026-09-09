@@ -1,11 +1,17 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h4>Loading log: {{ file }}...</h4>
-<div id="container">
-
+<div class="container content">
+    <p class="mb-2"><a href="history">&larr; Back to History</a></p>
+    <h1 class="page-heading">Log: {{ file }}</h1>
+    <p class="log-actions mb-3">
+        <a href="logs?logfile={{ file }}&mode=full"{% if mode == 'full' %} class="is-current"{% endif %}>full</a>
+        <a href="logs?logfile={{ file }}&mode=armcat"{% if mode == 'armcat' %} class="is-current"{% endif %}>arm</a>
+        <a href="logs?logfile={{ file }}&mode=tail"{% if mode == 'tail' %} class="is-current"{% endif %}>live</a>
+        <a href="logreader?logfile={{ file }}&mode=download">download</a>
+    </p>
     <div id="log">
-        <pre id="{{ file }}" ></pre>
+        <pre id="{{ file }}"></pre>
     </div>
 </div>
 {% endblock %}
@@ -13,6 +19,7 @@
 {% block js %}
 {{ super() }}
 <script>
+    activeTab("history");
     const output = document.getElementById('{{ file }}');
 
     const xhr = new XMLHttpRequest();
@@ -21,7 +28,6 @@
     {% else %}
         xhr.open('GET', '/logreader?logfile={{ file }}&mode={{ mode }}&json=1');
     {% endif %}
-    xhr.open
     xhr.send();
 
     setInterval(function() {
@@ -33,4 +39,3 @@
 
 </script>
 {% endblock %}
-

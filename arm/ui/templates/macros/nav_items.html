@@ -1,0 +1,22 @@
+{% from 'macros/icons.html' import nav_icon %}
+
+{% macro nav_anchor(key, href, label, short=None, with_id=True) %}
+<a {% if with_id %}id="nav{{ key }}" {% endif %}data-nav="{{ key }}" class="nav-link" href="{{ href }}">
+    {{ nav_icon(key) }}
+    <span class="nav-label-full">{{ label }}</span>
+    <span class="nav-label-short">{{ short or label }}</span>
+</a>
+{% endmacro %}
+
+{% macro primary_nav(with_id=True) %}
+    {{ nav_anchor('home', 'index.html', 'Home', with_id=with_id) }}
+    {% if current_user.is_authenticated or config.LOGIN_DISABLED %}
+        {{ nav_anchor('database', 'database', 'Database', 'DB', with_id=with_id) }}
+        {{ nav_anchor('history', 'history', 'History', with_id=with_id) }}
+        {{ nav_anchor('armsettings', 'settings', 'Settings', with_id=with_id) }}
+        {{ nav_anchor('help', 'help', 'Help', with_id=with_id) }}
+    {% else %}
+        {{ nav_anchor('login', 'login', 'Login', with_id=with_id) }}
+        {{ nav_anchor('help', 'help', 'Help', with_id=with_id) }}
+    {% endif %}
+{% endmacro %}

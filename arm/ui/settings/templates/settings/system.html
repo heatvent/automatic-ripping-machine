@@ -1,0 +1,46 @@
+{% block system %}
+    <div class="tab-pane pt-5" id="sysinfo" role="tabpanel" aria-labelledby="sysinfo-tab">
+        <h4>System Information</h4>
+        <nav class="settings-toc" aria-label="System information sections">
+            <a href="#software-versions">Software Versions</a>
+            <a href="#sys-cpu">System</a>
+            <a href="#sys-memory">System Memory</a>
+            <a href="#sys-storage">Storage</a>
+            <a href="#sys-hw-transcode">Hardware transcoding</a>
+        </nav>
+        <section class="system-section" id="software-versions">
+            <h5>Software Versions</h5>
+            <div class="card">
+                <div class="card-body col">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">
+                            Datetime: {{ stats['server_datetime'] }} <br>
+                            Timezone: {{ stats['server_timezone'] }}
+                        </li>
+                        <li class="list-group-item">
+                            Python version: <code>{{ stats['python_version'] }}</code><br>
+                            A.R.M version: <code>{{ stats['arm_version_local'] }}</code><br>
+                            {% if not stats['updated'] %}
+                                <i>&nbsp;<a href="https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Docker-Upgrading" target="_blank">Update available</a>,
+                                    Version:</i> <code>{{ stats['arm_version_remote'] }}</code><br>
+                            {% endif %}
+                            Current git version: <code>{{ stats['git_commit'] }}</code><br>
+                        </li>
+                        <li class="list-group-item">
+                            Total rips: <code>{{ stats['total_rips'] }}</code><br>
+                            Movies ripped: <code>{{ stats['movies_ripped'] }}</code><br>
+                            Series ripped: <code>{{ stats['series_ripped'] }}</code><br>
+                            Audio ripped: <code>{{ stats['cds_ripped'] }}</code>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+        <section class="system-section" id="system-info">
+            <h5>System Information</h5>
+            <p>Current CPU and System information —
+                <a href="updatesysinfo">Update system information</a></p>
+            {% include 'settings/sysinfo.html' %}
+        </section>
+    </div>
+{% endblock %}

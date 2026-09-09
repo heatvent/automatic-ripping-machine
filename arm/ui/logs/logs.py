@@ -9,7 +9,7 @@ Covers
 import os
 from pathlib import Path
 from flask_login import LoginManager, login_required  # noqa: F401
-from flask import render_template, request, Blueprint, send_file, session
+from flask import render_template, request, Blueprint, send_file, session, redirect, url_for
 from werkzeug.routing import ValidationError
 
 import arm.ui.utils as ui_utils
@@ -31,7 +31,7 @@ def logs():
     """
     mode = request.args['mode']
     logfile = request.args['logfile']
-    session["page_title"] = "Logs"
+    session["page_title"] = "Log"
 
     return render_template('logview.html', file=logfile, mode=mode)
 
@@ -39,21 +39,8 @@ def logs():
 @route_logs.route('/listlogs', defaults={'path': ''})
 @login_required
 def listlogs(path):
-    """
-    The 'View logs' page - show a list of logfiles in the log folder with creation time and size
-    Gives the user links to tail/arm/Full/download
-    """
-    base_path = cfg.arm_config['LOGPATH']
-    full_path = os.path.join(base_path, path)
-    session["page_title"] = "Logs"
-
-    # Deal with bad data
-    if not os.path.exists(full_path):
-        raise ValidationError
-
-    # Get all files in directory
-    files = ui_utils.get_info(full_path)
-    return render_template('logfiles.html', files=files, date_format=cfg.arm_config['DATE_FORMAT'])
+    """Logs now live on History; keep this URL as a redirect."""
+    return redirect(url_for("route_history.history") + "#other-logs")
 
 
 @route_logs.route('/logreader')

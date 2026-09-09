@@ -1,4 +1,149 @@
+import os
 import re
+import secrets
+
+SECRET_SETTING_KEYS = frozenset({
+    "OMDB_API_KEY", "EMBY_USERID", "EMBY_PASSWORD",
+    "EMBY_API_KEY", "PB_KEY", "IFTTT_KEY", "PO_KEY",
+    "PO_USER_KEY", "PO_APP_KEY", "ARM_API_KEY",
+    "TMDB_API_KEY", "MAKEMKV_PERMA_KEY",
+})
+
+
+def is_secret_setting_key(key):
+    """True for yaml keys that should be masked in the Settings UI."""
+    if not key:
+        return False
+    if key in SECRET_SETTING_KEYS:
+        return True
+    return bool(re.search(r"(_KEY|_API|_PASSWORD)$", str(key)))
+
+
+def mask_last(value, n=4):
+    """Replace the last n characters of a string with asterisks."""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        value = str(value)
+    if not value:
+        return value
+    if len(value) > n:
+        return value[:-n] + ("*" * n)
+    return "*" * len(value)
+
+
+def restore_masked_value(submitted, current):
+    """Keep the stored secret when the form posted the masked display value."""
+    submitted_text = "" if submitted is None else str(submitted).strip()
+    current_text = "" if current is None else str(current)
+    if submitted_text == mask_last(current_text):
+        return current_text
+    return submitted_text
+
+
+def load_or_create_secret_key(secret_path, environ=None):
+    """
+    Flask session key: ARM_SECRET_KEY env, else a file next to the DB.
+    Generates and persists a random key when neither exists.
+    """
+    env = (environ if environ is not None else os.environ).get("ARM_SECRET_KEY")
+    if env:
+        return env
+    try:
+        if os.path.isfile(secret_path):
+            with open(secret_path, encoding="utf-8") as handle:
+                existing = handle.read().strip()
+            if existing:
+                return existing
+        key = secrets.token_hex(32)
+        directory = os.path.dirname(secret_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        fd = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(key)
+        return key
+    except FileExistsError:
+        with open(secret_path, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return secrets.token_hex(32)
+
+
+HIDDEN_SETTING_KEYS = frozenset({
+    "UNIDENTIFIED_EJECT",
+    "UMASK",
+    "RIPMETHOD_DVD",
+    "RIPMETHOD_BR",
+})
+
+BOOLEAN_SETTING_KEYS = frozenset({
+    "PREVENT_99", "ARM_CHECK_UDF", "DISABLE_LOGIN", "SKIP_TRANSCODE",
+    "MANUAL_WAIT", "ALLOW_DUPLICATES", "RIP_POSTER", "AUTO_EJECT",
+    "SET_MEDIA_PERMISSIONS", "SET_MEDIA_OWNER", "DELRAWFILES",
+    "USE_FFMPEG", "MAINFEATURE", "EMBY_REFRESH", "NOTIFY_RIP",
+    "NOTIFY_TRANSCODE", "NOTIFY_JOBID", "GET_VIDEO_TITLE",
+})
+
+ENUM_SETTING_CHOICES = {
+    "RIPMETHOD": (
+        ("mkv", "MKV titles"),
+        ("backup", "Blu-ray disc backup"),
+        ("backup_dvd", "DVD backup extract"),
+    ),
+    "VIDEOTYPE": (
+        ("auto", "Auto"),
+        ("series", "Series"),
+        ("movie", "Movie"),
+    ),
+    "LOGLEVEL": (
+        ("DEBUG", "Debug"),
+        ("INFO", "Info"),
+        ("WARNING", "Warning"),
+        ("ERROR", "Error"),
+        ("CRITICAL", "Critical"),
+    ),
+    "METADATA_PROVIDER": (
+        ("omdb", "OMDb"),
+        ("tmdb", "TMDb"),
+    ),
+    "GET_AUDIO_TITLE": (
+        ("musicbrainz", "MusicBrainz"),
+        ("none", "None"),
+    ),
+    "DEST_EXT": (
+        ("mkv", "MKV"),
+        ("mp4", "MP4"),
+    ),
+}
+
+
+def yaml_is_true(value):
+    """Interpret yaml/form values that mean boolean true."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in ("true", "1", "yes", "on")
+
+
+def setting_value_as_text(value):
+    """Normalize a config value to the string form written to arm.yaml."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return ""
+    return str(value)
+
+
+def cors_origins_from_children(arm_children):
+    """CORS origins for ARM_CHILDREN URLs. Empty means same-origin only."""
+    origins = []
+    for part in str(arm_children or "").split(","):
+        origin = part.strip().rstrip("/")
+        if origin:
+            origins.append(origin)
+    return origins
 
 
 def arm_yaml_check_groups(comments, key):

@@ -27,20 +27,21 @@ and also iPads specifically.
     }
 
     tr {
-        border: 1px solid #ccc;
+        border: 1px solid #ffffff14;
         margin-top: 5px;
         border-radius: 7px;
+        background: #1f1f1f;
     }
 
     th {
-        border-bottom: 1px solid #c5c6c8;
+        border-bottom: 1px solid #ffffff14;
+        color: #f5f5f5;
     }
 
     td {
         white-space: normal !important;
-        /* Behave  like a "row" */
         border: none;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid #ffffff14;
         position: relative;
         padding-left: 50%;
         padding-top: 3px;

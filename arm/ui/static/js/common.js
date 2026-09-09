@@ -14,6 +14,13 @@ const CARD_DECK = ".card-deck";
 const SUCCESS_CLASS = "alert-success";
 const MODAL_FOOTER = ".modal-footer";
 
+function jobConfig(job) {
+    if (job && job.config && typeof job.config === "object") {
+        return job.config;
+    }
+    return {};
+}
+
 function getRipperName(job, idsplit) {
     let ripperName;
     if (job.ripper) {
@@ -33,7 +40,7 @@ function addJobItem(job, authenticated) {
     const idsplit = job.job_id.split("_");
     console.log(`${idsplit[1]} - ${idsplit[0]}`)
     //Start creating the card with job id and header title
-    let x = `<div class="col-md-4" id="jobId${job.job_id}"><div class="card m-3  mx-auto" style="min-height: 420px;">`;
+    let x = `<div class="col-md-4" id="jobId${job.job_id}"><div class="card m-3  mx-auto">`;
     x += `<div class="card-header row no-gutters justify-content-center"><strong id="jobId${job.job_id}_header">${titleManual(job)}</strong></div>`;
     // Main holder for the 3 sections of info - includes 1 section (Poster img)
     // We need to check if idsplit is undefined, database page doesn't have splitid's
@@ -52,7 +59,7 @@ function addJobItem(job, authenticated) {
 
 function transcodingCheck(job) {
     let x = "";
-    if (job.status === "transcoding" && job.stage !== "" && job.progress || job.disctype === "music" && job.stage !== "") {
+    if ((job.status === "transcoding" || job.status === "waiting_transcode") && job.stage !== "" && job.progress || job.disctype === "music" && job.stage !== "") {
         x += `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${job.stage}</div>`;
         x += `<div id="jobId${job.job_id}_progress" >`;
         x += `<div class="progress">
@@ -109,15 +116,23 @@ function jobPosterSrc(job) {
 function musicCheck(job, idsplit) {
     let x = "";
     if (!isMusicJob(job)) {
-        x = `<a href="titlesearch?job_id=${idsplit[1]}" class="btn btn-primary">Title Search</a>
-             <a href="customTitle?job_id=${idsplit[1]}" class="btn btn-primary">Custom Title</a>
-             <a href="changeparams?config_id=${idsplit[1]}" class="btn btn-primary">Edit Settings</a>`;
+        x = `<a href="titlesearch?job_id=${idsplit[1]}" class="btn btn-sm btn-primary">Title Search</a>
+             <a href="customTitle?job_id=${idsplit[1]}" class="btn btn-sm btn-primary">Custom Title</a>
+             <a href="changeparams?config_id=${idsplit[1]}" class="btn btn-sm btn-primary">Edit Settings</a>`;
     }
     return x;
 }
 
 function posterCheck(job) {
-    return `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${jobPosterSrc(job)}" width="240px" class="img-thumbnail">`;
+    return `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${jobPosterSrc(job)}" width="160" class="img-thumbnail">`;
+}
+
+function statusClass(status) {
+    return "status-badge status-" + String(status || "").toLowerCase().replace(/\s+/g, "-");
+}
+
+function statusBadgeHtml(id, status) {
+    return `<span id="${id}" class="${statusClass(status)}" title="${status}">${status}</span>`;
 }
 
 function titleManual(job) {
@@ -132,8 +147,7 @@ function buildMiddleSection(job) {
     x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year && job.year !== "None" ? job.year : ""}</div>`;
     x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${jobTypeLabel(job)}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${job.devpath}</div>`;
-    x += `<div><strong>Status: </strong><img id="jobId${job.job_id}_status" 
-                               src="static/img/${job.status}.png" height="20px" alt="${job.status}" title="${job.status}"></div>`;
+    x += `<div><strong>Status: </strong>${statusBadgeHtml("jobId" + job.job_id + "_status", job.status)}</div>`;
     x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div></div></div>`;
     return x;
 }
@@ -151,21 +165,22 @@ function buildRightSection(job, idsplit, authenticated) {
     // Section 3 (Right Top) Contains Config.values
     x = "<div class=\"col-lg-4\"><div class=\"card-body px-1 py-1\">";
     x += `<div id="jobId${job.job_id}_RIPPER"><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
-    x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${job.config.RIPMETHOD}</div>`;
-    x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${job.config.MAINFEATURE}</div>`;
-    x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${job.config.MINLENGTH}</div>`;
-    x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${job.config.MAXLENGTH}</div>`;
+    const cfg = jobConfig(job);
+    x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${cfg.RIPMETHOD || ""}</div>`;
+    x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${cfg.MAINFEATURE || ""}</div>`;
+    x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${cfg.MINLENGTH || ""}</div>`;
+    x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${cfg.MAXLENGTH || ""}</div>`;
     x += "</div>";
     // Section 3 (Right Bottom) Contains Buttons for arm json api
     // Only show when authenticated
     x += `<div class="card-body px-2 py-1">`;
     if (authenticated === true) {
-        x += `<div class="btn-group-vertical" role="group" aria-label="buttons" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>
-              <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" 
+        x += `<div class="btn-group-vertical job-actions" role="group" aria-label="buttons" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>
+              <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" 
               data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>
-              <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-primary">View logfile</a>`;
+              <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-sm btn-primary">View logfile</a>`;
         x += musicCheck(job, idsplit);
-        x += `<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" 
+        x += `<button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" 
               data-jobid="${idsplit[1]}" data-href="json?mode=fixperms&job=${idsplit[1]}">Fix Permissions</button>`;
         x += `</div>`;
     }
@@ -221,47 +236,8 @@ function pingReadNotify(toastId) {
     });
 }
 
-function addToast(title, body, toastId) {
-    // Get the toast timeout from UISettings
-    const toast_timeout = getNotifyTimeout();
-    console.log("Notification timeout: " + toast_timeout);
-
-    const toast = `<div id="toast${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="true" data-animation="true" data-delay="${parseInt(toast_timeout)}" style="z-index:1000">
-        <div class="toast-header">
-            <img src="static/img/success.png" class="rounded mr-2" alt="arm message" height="20px" width="20px">
-                <strong class="mr-auto">${title}</strong>
-                <small class="text-muted">just now</small>
-                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-        </div>
-        <div class="toast-body">
-            ${body}
-        </div>
-    </div>`;
-    $("#toastHolder").append(toast);
-    const newToast = $(`#toast${toastId}`);
-    newToast.toast('show');
-    newToast.on('hidden.bs.toast', function () {
-        // do something...
-        pingReadNotify(toastId)
-    })
-}
-
-// Get the toast timeout settings from UI Settings via JSON
-function getNotifyTimeout() {
-    // initilise notify and set a default of 6.5 seconds
-    let notify = 6500;
-
-    $.ajax({
-        url: "/json?mode=notify_timeout",
-        type: "get",
-        timeout: 2000,
-        success: function (data) {
-            console.log("UI timeout: " + data.notify_timeout);
-            notify = data.notify_timeout;
-        }
-    });
-
-    return notify;
+function addToast(_title, _body, toastId) {
+    if (toastId !== undefined && toastId !== null && toastId !== "") {
+        pingReadNotify(toastId);
+    }
 }

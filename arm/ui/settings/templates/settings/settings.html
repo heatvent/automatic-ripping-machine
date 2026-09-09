@@ -11,34 +11,13 @@
             white-space: pre-wrap;
             font-weight: bold;
         }
-
-        .popover-header {
-            background-color: #f2f2f2;
-            border-bottom: 1px solid #EBEBEB;
-            border-radius: 5px 5px 0 0;
-            font-size: 20px;
-            line-height: 18px;
-            margin: 0;
-            padding: 8px 14px;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        div a label {
-            display: grid;
-            font-weight: bolder;
-            margin: 1rem;
-            font-size: 25px;
-        }
     </style>
-    <!-- MESSAGES - We keep this here incase we need it later -->
     <div class="alert alert-success d-none" role="alert" id="success">
-        <h4 class="alert-heading">Settings were saved successfully</h4>
+        <p class="alert-heading">Settings were saved successfully</p>
     </div>
     <div class="alert alert-danger d-none" role="alert" id="fail">
-        <h4 class="alert-heading">There was an error saving settings</h4>
+        <p class="alert-heading">There was an error saving settings</p>
     </div>
-    <!-- END MESSAGES - We keep this here incase we need it later -->
     <div class="container" style="max-width: initial!important;">
         <div class="row">
             <div class="col">
@@ -46,59 +25,49 @@
                     <!-- Nav Tabs -->
                     <ul class="nav nav-tabs" id="myTab" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <a class="nav-link active" id="home-tab" data-toggle="tab" href="#home" role="tab"
-                               aria-controls="home" aria-selected="true">General Info</a>
+                            <a class="nav-link active" id="general-tab" data-toggle="tab" href="#general" role="tab"
+                               aria-controls="general" aria-selected="true">General</a>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="system-tab" data-toggle="tab" href="#system" role="tab"
-                               aria-controls="system" aria-selected="false">System Info</a>
+                            <a class="nav-link" id="sysinfo-tab" data-toggle="tab" href="#sysinfo" role="tab"
+                               aria-controls="sysinfo" aria-selected="false">System Information</a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="drives-tab" data-toggle="tab" href="#drives" role="tab"
+                               aria-controls="drives" aria-selected="false">Disk Drives</a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="ripper-tab" data-toggle="tab" href="#ripper" role="tab"
+                               aria-controls="ripper" aria-selected="false">Movie Ripper</a>
                         </li>
                         <li class="nav-item" role="presentation">
                             <a class="nav-link" id="abcde-tab" data-toggle="tab" href="#abcde" role="tab"
-                               aria-controls="abcde" aria-selected="false">abcde Config</a>
+                               aria-controls="abcde" aria-selected="false">CD Ripper</a>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="settings-tab" data-toggle="tab" href="#settings" role="tab"
-                               aria-controls="settings" aria-selected="false">Ripper Settings</a>
+                            <a class="nav-link" id="notifications-tab" data-toggle="tab" href="#notifications" role="tab"
+                               aria-controls="notifications" aria-selected="false">Notifications</a>
                         </li>
                         <li class="nav-item" role="presentation">
                             <a class="nav-link" id="uiSettingsTab-tab" data-toggle="tab" href="#uiSettingsTab"
                                role="tab"
                                aria-controls="uiSettingsTab" aria-selected="false">UI Settings</a>
                         </li>
-                        <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="apprise-tab" data-toggle="tab" href="#appriseTab"
-                               role="tab"
-                               aria-controls="appriseTab" aria-selected="false">Apprise config</a>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="help-tab" data-toggle="tab" href="#help"
-                               role="tab"
-                               aria-controls="help" aria-selected="false">Help</a>
-                        </li>
                     </ul>
 
                     <!-- Tab Panes -->
                     <div class="tab-content">
-                        <!-- General Info -->
                         {% include 'settings/general.html' %}
-                        <!-- system information -->
-                        {% include 'settings/tab_sysinfo.html' %}
-                        <!-- abcde config -->
-                        {% include 'settings/abcde.html' %}
-                        <!-- Ripper settings -->
+                        {% include 'settings/system.html' %}
+                        {% include 'settings/disk_drives.html' %}
                         {% include 'settings/ripper.html' %}
-                        <!-- UI settings -->
+                        {% include 'settings/abcde.html' %}
+                        {% include 'settings/notify.html' %}
                         {% include 'settings/ui.html' %}
-                        <!-- Apprise config -->
-                        {% include 'settings/apprise.html' %}
-                        <!-- Help config -->
-                        {% include 'settings/help.html' %}
                     </div>
                 </div>
             </div>
         </div>
-    </div>
     </div>
 {% endblock %}
 {% block footer %}{{ super() }}{% endblock %}
@@ -106,21 +75,54 @@
     {{ super() }}
     <script type="application/javascript">
         $(function () {
-            let toastCount = 0;
+            function clearSettingErrors(formToSend) {
+                formToSend.find(".is-invalid").removeClass("is-invalid");
+                formToSend.find(".setting-error").attr("hidden", true).text("");
+            }
+
+            function showSettingErrors(formToSend, errors) {
+                $.each(errors || {}, function (key, msg) {
+                    formToSend.find("[name='" + key + "']").addClass("is-invalid");
+                    formToSend.find("[data-error-for='" + key + "']")
+                        .text(msg).removeAttr("hidden");
+                });
+            }
 
             function sendSettings(formToSend, sendTo) {
+                clearSettingErrors(formToSend);
+                var formEl = formToSend.get(0);
+                if (formEl && typeof formEl.checkValidity === "function" && !formEl.checkValidity()) {
+                    if (typeof formEl.reportValidity === "function") {
+                        formEl.reportValidity();
+                    }
+                    $("#fail").removeClass("d-none");
+                    $("#success").addClass("d-none");
+                    return;
+                }
                 $.ajax({
                     type: 'POST',
                     url: sendTo,
                     data: formToSend.serialize()
                 }).done(function (data) {
                     if (data.success === true) {
-                        console.log(data)
-                        var dt = new Date();
-                        var time = `${dt.getHours()}:${dt.getMinutes()}:${dt.getSeconds()}`;
-                        addToast("Saved Successfully", `Saved ${data.form} settings at ${time}`, toastCount);
-                        toastCount++;
+                        $("#success").removeClass("d-none");
+                        $("#fail").addClass("d-none");
+                        window.setTimeout(function () {
+                            $("#success").addClass("d-none");
+                        }, 4000);
+                        if (data.restart_needed && typeof window.showUiActionBanner === "function") {
+                            window.showUiActionBanner("restart");
+                        } else if (data.reload_needed && typeof window.showUiActionBanner === "function") {
+                            window.showUiActionBanner("reload");
+                        }
+                    } else {
+                        $("#fail").removeClass("d-none");
+                        $("#success").addClass("d-none");
+                        showSettingErrors(formToSend, data.errors);
                     }
+                }).fail(function () {
+                    $("#fail").removeClass("d-none");
+                    $("#success").addClass("d-none");
                 });
             }
 
@@ -128,10 +130,18 @@
                 e.preventDefault();
                 sendSettings($("#uiSettings"), "/save_ui_settings");
             });
-            $("#settings").submit(function (e) {
+            $("#generalSettings").submit(function (e) {
+                e.preventDefault();
+                sendSettings($("#generalSettings"), "/save_settings");
+            });
+            $("#ripperSettings").submit(function (e) {
                 e.preventDefault();
                 sendSettings($("#ripperSettings"), "/save_settings");
-            })
+            });
+            $("#notifySettings").submit(function (e) {
+                e.preventDefault();
+                sendSettings($("#notifySettings"), "/save_settings");
+            });
             $("#abcdeSettings").submit(function (e) {
                 e.preventDefault();
                 sendSettings($("#abcdeSettings"), "/save_abcde_settings");
@@ -153,6 +163,27 @@
                 {% endfor %}
             {% endif %}
             activeTab("armsettings");
+            function showSettingsTabFromHash() {
+                var hash = window.location.hash;
+                if (hash === "#system") {
+                    hash = "#sysinfo";
+                }
+                if (!hash) {
+                    return;
+                }
+                var tab = $("#myTab a[href='" + hash + "']");
+                if (tab.length) {
+                    tab.tab("show");
+                }
+            }
+            showSettingsTabFromHash();
+            $(window).on("hashchange", showSettingsTabFromHash);
+            $("#myTab a[data-toggle='tab']").on("shown.bs.tab", function (e) {
+                var href = e.target.getAttribute("href");
+                if (href && history.replaceState) {
+                    history.replaceState(null, null, href);
+                }
+            });
         });
     </script>
 {% endblock %}

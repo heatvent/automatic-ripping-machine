@@ -18,7 +18,8 @@ class TitleSearchForm(FlaskForm):
 class ChangeParamsForm(FlaskForm):
     """Change config parameters form, used on pages\n
           - /changeparams"""
-    RIPMETHOD = SelectField('Rip Method: ', choices=[('mkv', 'mkv'), ('backup', 'backup')])
+    RIPMETHOD = SelectField('Rip Method: ', choices=[('mkv', 'mkv'), ('backup', 'backup'),
+                                                     ('backup_dvd', 'backup_dvd')])
     DISCTYPE = SelectField('Disc Type: ', choices=[('dvd', 'DVD'), ('bluray', 'Blu-ray'),
                                                    ('music', 'Music'), ('data', 'Data')])
     # "music", "dvd", "bluray" and "data"
@@ -31,17 +32,17 @@ class ChangeParamsForm(FlaskForm):
 class SettingsForm(FlaskForm):
     """settings form used on pages\n
               - /settings"""
-    MANUAL_WAIT = StringField('MANUAL_WAIT', validators=[DataRequired()])
-    DATE_FORMAT = StringField('DATE_FORMAT', validators=[DataRequired()])
-    HB_PRESET_DVD = StringField('HB_PRESET_DVD', validators=[DataRequired()])
-    HB_PRESET_BD = StringField('HB_PRESET_BD', validators=[DataRequired()])
-    HANDBRAKE_CLI = StringField('HANDBRAKE_CLI', validators=[DataRequired()])
-    DBFILE = StringField('DBFILE', validators=[DataRequired()])
-    LOGPATH = StringField('LOGPATH', validators=[DataRequired()])
-    INSTALLPATH = StringField('INSTALLPATH', validators=[DataRequired()])
-    RAW_PATH = StringField('RAW_PATH', validators=[DataRequired()])
-    TRANSCODE_PATH = StringField('TRANSCODE_PATH', validators=[DataRequired()])
-    COMPLETED_PATH = StringField('COMPLETED_PATH', validators=[DataRequired()])
+    MANUAL_WAIT = StringField('MANUAL_WAIT', validators=[Optional()])
+    DATE_FORMAT = StringField('DATE_FORMAT', validators=[Optional()])
+    HB_PRESET_DVD = StringField('HB_PRESET_DVD', validators=[Optional()])
+    HB_PRESET_BD = StringField('HB_PRESET_BD', validators=[Optional()])
+    HANDBRAKE_CLI = StringField('HANDBRAKE_CLI', validators=[Optional()])
+    DBFILE = StringField('DBFILE', validators=[Optional()])
+    LOGPATH = StringField('LOGPATH', validators=[Optional()])
+    INSTALLPATH = StringField('INSTALLPATH', validators=[Optional()])
+    RAW_PATH = StringField('RAW_PATH', validators=[Optional()])
+    TRANSCODE_PATH = StringField('TRANSCODE_PATH', validators=[Optional()])
+    COMPLETED_PATH = StringField('COMPLETED_PATH', validators=[Optional()])
     submit = SubmitField('Submit')
 
 
@@ -51,8 +52,8 @@ class UiSettingsForm(FlaskForm):
     index_refresh = IntegerField('index_refresh', validators=[DataRequired()])
     use_icons = StringField('use_icons')
     save_remote_images = StringField('save_remote_images')
-    bootstrap_skin = StringField('bootstrap_skin', validators=[DataRequired()])
-    language = StringField('language', validators=[DataRequired()])
+    bootstrap_skin = StringField('bootstrap_skin', validators=[Optional()])
+    language = StringField('language', validators=[Optional()])
     database_limit = IntegerField('database_limit', validators=[DataRequired()])
     notify_refresh = IntegerField('notify_refresh', validators=[DataRequired()])
     submit = SubmitField('Submit')
@@ -93,10 +94,7 @@ class PasswordReset(FlaskForm):
 
 
 class AbcdeForm(FlaskForm):
-    """abcde config form used on pages\n
-              - /settings"""
-    abcdeConfig = StringField('abcdeConfig', validators=[DataRequired()])
-    submit = SubmitField('Submit')
+    """CSRF wrapper for CD ripper (abcde) settings on /settings."""
 
 
 class SystemInfoDrives(FlaskForm):
