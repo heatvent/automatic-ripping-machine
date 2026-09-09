@@ -62,7 +62,10 @@ def get_x_jobs(job_status):
 
         for key, value in j.get_d().items():
             if key != "config":
-                job_results[i][str(key)] = str(value)
+                # Job.get_d() stringifies None as "None", which the UI then
+                # treats as a real title/year/poster and fails to refresh.
+                text = "" if value in (None, "None", "null") else str(value)
+                job_results[i][str(key)] = text
         i += 1
     if jobs:
         app.logger.debug("jobs  - we have " + str(len(job_results)) + " jobs")
@@ -102,8 +105,10 @@ def process_logfile(logfile, job, job_results):
 
 def percentage(part, whole):
     """percent calculator"""
-    percent = 100 * float(part) / float(whole)
-    return percent
+    whole_value = float(whole)
+    if whole_value == 0:
+        return 0.0
+    return 100 * float(part) / whole_value
 
 
 def find_last_regex_match(pattern, iterable):

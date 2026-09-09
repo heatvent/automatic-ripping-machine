@@ -13,6 +13,7 @@ USER="arm"
 # ID_CDROM_MEDIA_DVD = DVD
 #######################################################################################
 
+START_RIP=1
 if [ "$ID_CDROM_MEDIA_DVD" == "1" ]; then
 	echo "[ARM] Starting ARM for DVD on ${DEVNAME}" | logger -t ARM -s
 
@@ -27,10 +28,15 @@ elif [ "$ID_FS_TYPE" != "" ]; then
 
 else
 	echo "[ARM] Starting ARM for unknown disc type on ${DEVNAME}" | logger -t ARM -s
-
+	if [[ "$ID_CDROM_MEDIA" != "1" ]]; then
+		echo "[ARM] No disc present on ${DEVNAME}; skipping ripper start" | logger -t ARM -s
+		START_RIP=0
+	fi
 fi
 
-/bin/su -l -c "echo /opt/arm/venv/bin/python3 /opt/arm/arm/ripper/main.py -d ${DEVNAME} | at now" -s /bin/bash ${USER}
+if [[ "$START_RIP" == "1" ]]; then
+	/bin/su -l -c "echo /opt/arm/venv/bin/python3 /opt/arm/arm/ripper/main.py -d ${DEVNAME} | at now" -s /bin/bash ${USER}
+fi
 
 #######################################################################################
 # Check to see if the admin page is running, if not, start it

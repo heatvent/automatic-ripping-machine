@@ -37,6 +37,11 @@ elif [ "$ID_FS_TYPE" != "" ]; then
 else
 	  echo "[ARM] Starting ARM for unknown disc type on ${DEVNAME}" | logger -t ARM -s
 	  echo "$(date) [ARM] Starting ARM for unknown disc type on ${DEVNAME}" >> "$ARMLOG"
+    if [[ "$ID_CDROM_MEDIA" != "1" ]]; then
+        echo "[ARM] No disc present on ${DEVNAME}; skipping ripper start" | logger -t ARM -s
+        echo "$(date) [ARM] No disc present on ${DEVNAME}; skipping ripper start" >> "$ARMLOG"
+        exit 0
+    fi
 fi
 cd /home/arm
 python3 /opt/arm/arm/ripper/main.py -d "${DEVNAME}" | logger -t ARM -s
