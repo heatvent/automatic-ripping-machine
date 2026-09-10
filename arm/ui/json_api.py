@@ -15,6 +15,12 @@ import psutil
 from flask import request
 from time import time, strftime, gmtime, sleep
 
+from arm.config.makemkv_select import (
+    choose_main_feature_track,
+    find_similar_movie_titles,
+    format_hms,
+)
+from arm.config.path_health import media_path_health
 import arm.config.config as cfg
 from arm.models.config import Config
 from arm.models.job import Job, JobState, JOB_STATUS_FINISHED
@@ -32,6 +38,109 @@ def get_notifications():
     all_notification = Notifications.query.filter_by(seen=False)
     notification = [a.get_d() for a in all_notification]
     return notification
+
+
+def drive_status_payload():
+    """Compact drive tray state for the Home idle panel."""
+    rows = []
+    try:
+        drive_utils.update_job_status()
+        drives = drive_utils.get_drives()
+        drive_utils.update_tray_status(drives)
+        for drive in drives:
+            if drive.open:
+                tray = "open"
+            elif drive.stale:
+                tray = "unavailable"
+            elif drive.processing:
+                tray = "busy"
+            else:
+                tray = "closed"
+            rows.append({
+                "name": drive.name or drive.mount or "Drive",
+                "mount": drive.mount or "",
+                "tray": tray,
+                "mode": drive.drive_mode or "auto",
+            })
+    except Exception as err:  # noqa: BLE001
+        app.logger.debug("drive_status_payload: %s", err)
+    return rows
+
+
+def _job_minlength(job):
+    if job.config is None:
+        return 0
+    try:
+        return int(job.config.MINLENGTH or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def playlist_picks_for_job(job):
+    """Titles ARM thinks are playlist clones, for the Home picker."""
+    tracks = list(job.tracks) if job.tracks is not None else []
+    similar = find_similar_movie_titles(tracks, _job_minlength(job))
+    if not similar:
+        similar = [track for track in tracks if track.process] or tracks
+    suggested = choose_main_feature_track(similar)
+    picks = []
+    for track in similar:
+        suggested_match = (
+            suggested is not None and track.track_id == suggested.track_id
+        )
+        picks.append({
+            "track_id": track.track_id,
+            "track_number": str(track.track_number),
+            "length": int(track.length or 0),
+            "length_hms": format_hms(track.length),
+            "chapters": int(track.chapters or 0),
+            "filesize": int(track.filesize or 0),
+            "suggested": bool(suggested_match),
+            "process": bool(track.process),
+        })
+    return picks
+
+
+def select_playlist(job_id, track=""):
+    """Confirm which MakeMKV title(s) to rip after playlist obfuscation."""
+    json_return = {
+        "success": False,
+        "job": job_id,
+        "mode": "select_playlist",
+    }
+    try:
+        job = Job.query.get(int(job_id))
+    except (TypeError, ValueError):
+        json_return["error"] = "Invalid job"
+        return json_return
+    if job is None:
+        json_return["error"] = "Job not found"
+        return json_return
+    if job.status != JobState.PLAYLIST_WAIT.value:
+        json_return["error"] = "Job is not waiting for a playlist pick"
+        return json_return
+    similar = find_similar_movie_titles(list(job.tracks or []), _job_minlength(job))
+    choice = str(track or "").strip().lower()
+    wanted = set()
+    if choice in {"all", "similar"}:
+        wanted = {str(item.track_number) for item in similar}
+    elif choice in {"", "suggested"}:
+        suggested = choose_main_feature_track(similar or list(job.tracks or []))
+        if suggested is not None:
+            wanted = {str(suggested.track_number)}
+    else:
+        wanted = {part.strip() for part in str(track).split(",") if part.strip()}
+    if not wanted:
+        json_return["error"] = "No titles selected"
+        return json_return
+    for item in job.tracks:
+        item.process = str(item.track_number) in wanted
+        item.main_feature = item.process and len(wanted) == 1
+    job.manual_start = True
+    db.session.commit()
+    json_return["success"] = True
+    json_return["tracks"] = sorted(wanted)
+    return json_return
 
 
 def get_x_jobs(job_status):
@@ -68,6 +177,8 @@ def get_x_jobs(job_status):
                 # treats as a real title/year/poster and fails to refresh.
                 text = "" if value in (None, "None", "null") else str(value)
                 job_results[i][str(key)] = text
+        if j.status == JobState.PLAYLIST_WAIT.value:
+            job_results[i]["playlist_picks"] = playlist_picks_for_job(j)
         i += 1
     if jobs:
         app.logger.debug("jobs  - we have " + str(len(job_results)) + " jobs")
@@ -76,11 +187,15 @@ def get_x_jobs(job_status):
     # Get authentication state
     authenticated = authenticated_state()
 
-    return {"success": success,
-            "mode": job_status,
-            "results": job_results,
-            "arm_name": cfg.arm_config['ARM_NAME'],
-            "authenticated": authenticated}
+    payload = {"success": success,
+               "mode": job_status,
+               "results": job_results,
+               "arm_name": cfg.arm_config['ARM_NAME'],
+               "authenticated": authenticated}
+    if job_status == "joblist":
+        payload["path_health"] = media_path_health(cfg.arm_config)
+        payload["drives"] = drive_status_payload()
+    return payload
 
 
 def process_logfile(logfile, job, job_results):
@@ -340,13 +455,25 @@ def read_all_log_lines(log_file):
     return line
 
 
+def escape_sql_like(value):
+    """Escape LIKE wildcards so title search can keep spaces and punctuation."""
+    return (
+        str(value or "")
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+
+
 def search(search_query):
     """ Queries ARMui db for the movie/show matching the query"""
-    safe_search = re.sub(r'[^a-zA-Z\d]', '', search_query)
-    safe_search = f"%{safe_search}%"
+    needle = " ".join(str(search_query or "").split())
+    if not needle:
+        return {'success': True, 'mode': 'search', 'results': {}}
+    safe_search = f"%{escape_sql_like(needle)}%"
     app.logger.debug('-' * 30)
 
-    posts = db.session.query(Job).filter(Job.title.like(safe_search)).all()
+    posts = db.session.query(Job).filter(Job.title.like(safe_search, escape="\\")).all()
     search_results = {}
     i = 0
     for job in posts:
@@ -498,6 +625,15 @@ def abandon_job(job_id):
 
     # Kill the process id
     job = Job.query.get(int(job_id))
+    if job is None:
+        json_return["Error"] = "Job not found"
+        notification = Notifications(
+            f"Job: {job_id} isn't a valid job!",
+            f"Job with id: {job_id} doesnt match anything in the database",
+        )
+        db.session.add(notification)
+        db.session.commit()
+        return json_return
     job.status = JobState.FAILURE.value
     try:
         terminate_process(job.pid)
@@ -550,17 +686,18 @@ def change_job_params(config_id):
     if request.method != 'POST':
         return {'success': False, 'error': 'POST required', 'form': 'change_job_params'}
     job = Job.query.get(config_id)
+    if job is None or job.config is None:
+        return {'success': False, 'error': 'Job not found', 'form': 'change_job_params'}
     config = job.config
     form = ChangeParamsForm()
     app.logger.debug("Before valid")
     if form.validate():
         app.logger.debug("Valid")
         job.disctype = format(form.DISCTYPE.data)
-        cfg.arm_config["MINLENGTH"] = config.MINLENGTH = format(form.MINLENGTH.data)
-        cfg.arm_config["MAXLENGTH"] = config.MAXLENGTH = format(form.MAXLENGTH.data)
-        cfg.arm_config["RIPMETHOD"] = config.RIPMETHOD = format(form.RIPMETHOD.data)
+        config.MINLENGTH = format(form.MINLENGTH.data)
+        config.MAXLENGTH = format(form.MAXLENGTH.data)
+        config.RIPMETHOD = format(form.RIPMETHOD.data)
         config.MAINFEATURE = bool(form.MAINFEATURE.data)
-        cfg.arm_config["MAINFEATURE"] = config.MAINFEATURE
         args = {'disctype': job.disctype}
         message = f'Parameters changed. Rip Method={config.RIPMETHOD}, Main Feature={config.MAINFEATURE},' \
                   f'Minimum Length={config.MINLENGTH}, Maximum Length={config.MAXLENGTH}, Disctype={job.disctype}'

@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container content">
-    <p class="mb-2"><a href="history">&larr; Back to History</a></p>
+    <p class="mb-2"><a href="jobs">&larr; Back to History</a></p>
     <h1 class="page-heading">Log: {{ file }}</h1>
     <p class="log-actions mb-3">
         <a href="logs?logfile={{ file }}&mode=full"{% if mode == 'full' %} class="is-current"{% endif %}>full</a>
@@ -19,7 +19,7 @@
 {% block js %}
 {{ super() }}
 <script>
-    activeTab("history");
+        activeTab("jobs");
     const output = document.getElementById('{{ file }}');
 
     const xhr = new XMLHttpRequest();

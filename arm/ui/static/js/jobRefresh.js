@@ -13,18 +13,16 @@ var activeJobs = [];
 
 $(document).ready(function () {
     pushChildServers();
+    updateHomeEmptyState();
     refreshJobs();
     activeTab("home");
 
     $("#save-yes").bind("click", function () {
-        console.log(hrrref);
         if (hrrref !== "") {
             // Add the spinner to let them know we are loading
             $("#m-body").append("<div class=\"d-flex justify-content-center\"><div class=\"spinner-border\" role=\"status\">" +
                                 "<span class=\"sr-only\">Loading...</span></div></div>");
             $.get(hrrref, function (data) {
-                console.log(data.success);
-                console.log("#jobId" + activeJob);
                 if (data.success && data.mode === "abandon") {
                     $("#id" + activeJob).remove();
                     $("#message1 .alert-heading").html("Job was successfully abandoned");
@@ -50,6 +48,22 @@ $(document).ready(function () {
         activeJob = button.data("jobid");
         const modal = $(this);
         updateModal(modal);
+    });
+    $(document).on("click", ".playlist-pick", function (event) {
+        event.preventDefault();
+        const button = $(this);
+        button.prop("disabled", true);
+        const jobId = button.data("job");
+        const track = button.data("track");
+        $.get("json?mode=select_playlist&job=" + encodeURIComponent(jobId) + "&track=" + encodeURIComponent(track), function (data) {
+            if (data && data.success) {
+                refreshJobs();
+            } else {
+                button.prop("disabled", false);
+            }
+        }, "json").fail(function () {
+            button.prop("disabled", false);
+        });
     });
 });
 
@@ -145,7 +159,6 @@ function checkTranscodeStatus(job) {
  */
 function updateContents(item, _job, keyString, itemContents) {
     if (item[0] === undefined) {
-        console.log(item)
         return false;
     }
     const shown = (itemContents === undefined || itemContents === null ||
@@ -163,6 +176,14 @@ function updateContents(item, _job, keyString, itemContents) {
  * @param {Class} job     Fresh job pulled from api
  */
 function updateJobItem(oldJob, job) {
+    if (oldJob.status !== job.status &&
+        (oldJob.status === "waiting_playlist" || job.status === "waiting_playlist")) {
+        const card = document.getElementById("jobId" + job.job_id);
+        if (card) {
+            $(card).replaceWith(addJobItem(job, true));
+        }
+        return;
+    }
     const cardHeader = $(`#jobId${job.job_id}_header`);
     const posterUrl = $(`#jobId${job.job_id}_poster_url`);
     const status = $(`#jobId${job.job_id}_status`);
@@ -184,12 +205,17 @@ function updateJobItem(oldJob, job) {
             }
         }
     }
-    if (status[0] && job.status !== status[0].title && job.status !== status[0].textContent) {
-        status[0].className = (typeof statusClass === "function")
-            ? statusClass(job.status)
-            : ("status-badge status-" + String(job.status || "").replace(/\s+/g, "-"));
-        status[0].title = job.status;
-        status[0].textContent = job.status;
+    if (status[0]) {
+        const rawStatus = status[0].dataset.status || "";
+        const label = (typeof statusLabel === "function") ? statusLabel(job.status) : job.status;
+        if (job.status !== rawStatus || status[0].textContent !== label) {
+            status[0].className = (typeof statusClass === "function")
+                ? statusClass(job.status)
+                : ("status-badge status-" + String(job.status || "").replace(/\s+/g, "-"));
+            status[0].title = label;
+            status[0].textContent = label;
+            status[0].dataset.status = job.status || "";
+        }
     }
     // Go through and update job values as needed
     updateContents($(`#jobId${job.job_id}_year`), job, "Year", job.year);
@@ -197,11 +223,23 @@ function updateJobItem(oldJob, job) {
     updateContents($(`#jobId${job.job_id}_video_type`), job, "Type",
         (typeof jobTypeLabel === "function") ? jobTypeLabel(job) : job.video_type);
     updateProgress(job, oldJob);
-    const cfg = (typeof jobConfig === "function") ? jobConfig(job) : (job.config || {});
-    updateContents($(`#jobId${job.job_id}_RIPMETHOD`), job, "Rip Method", cfg.RIPMETHOD);
-    updateContents($(`#jobId${job.job_id}_MAINFEATURE`), job, "Main Feature", cfg.MAINFEATURE);
-    updateContents($(`#jobId${job.job_id}_MINLENGTH`), job, "Min Length", cfg.MINLENGTH);
-    updateContents($(`#jobId${job.job_id}_MAXLENGTH`), job, "Max Length", cfg.MAXLENGTH);
+    const picker = document.getElementById(`jobId${job.job_id}_playlist`);
+    const nextPicker = (typeof playlistPickerHtml === "function")
+        ? playlistPickerHtml(job, String(job.job_id).split("_"))
+        : "";
+    if (picker && nextPicker) {
+        picker.outerHTML = nextPicker;
+    } else if (picker && !nextPicker) {
+        picker.remove();
+    }
+    const errorBox = $(`#jobId${job.job_id}_errors`);
+    if (errorBox[0]) {
+        const errors = job.errors && job.errors !== "None" ? String(job.errors) : "";
+        if (errorBox[0].textContent !== errors) {
+            errorBox[0].textContent = errors;
+        }
+        errorBox[0].hidden = !errors;
+    }
 }
 
 /**
@@ -223,7 +261,6 @@ function refreshJobsComplete() {
     for (let i = activeJobs.length - 1; i >= 0; i--) {
         const job = activeJobs[i];
         if (typeof job !== "undefined" && !job.active) {
-            console.log("Job isn't active:" + job.job_id.split("_")[1]);
             removeJobItem(job);
             activeJobs.splice(i, 1);
         }
@@ -239,6 +276,84 @@ function refreshJobsComplete() {
         elem.remove();
         $(elem).appendTo("#joblist");
     });
+    updateHomeEmptyState();
+}
+
+function escapeHomeText(value) {
+    return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function updateHomeEmptyState() {
+    const heading = document.getElementById("homeHeading");
+    const joblist = document.getElementById("joblist");
+    const hint = document.getElementById("homeIdleHint");
+    if (!joblist) {
+        return;
+    }
+    const hasJobs = joblist.querySelectorAll(".col-md-4").length > 0;
+    if (heading) {
+        heading.hidden = hasJobs;
+    }
+    if (hint) {
+        hint.hidden = hasJobs;
+    }
+    joblist.hidden = !hasJobs;
+}
+
+function renderHomeConsole(data) {
+    const pathsEl = document.getElementById("homePathHealth");
+    const drivesEl = document.getElementById("homeDrives");
+    const warnEl = document.getElementById("homePathWarn");
+    if (!data) {
+        return;
+    }
+    const paths = Array.isArray(data.path_health) ? data.path_health : [];
+    if (pathsEl) {
+        if (!paths.length) {
+            pathsEl.innerHTML = "<div class=\"home-console-empty\">No folder paths configured.</div>";
+        } else {
+            pathsEl.innerHTML = paths.map(function (row) {
+                const ok = row.ok ? "is-ok" : "is-bad";
+                const detail = row.ok
+                    ? (row.free_gb != null ? `${row.free_gb} GB free` : "writable")
+                    : (row.error || "not writable");
+                const path = row.path ? `<div class="home-console-meta">${escapeHomeText(row.path)}</div>` : "";
+                return `<div class="path-health-row"><span class="path-health-dot ${ok}"></span>` +
+                    `<div class="path-health-copy"><strong>${escapeHomeText(row.label)}</strong>` +
+                    `<span class="path-health-detail">${escapeHomeText(detail)}</span>${path}</div></div>`;
+            }).join("");
+        }
+    }
+    const bad = paths.filter(function (row) { return !row.ok; });
+    if (warnEl) {
+        if (bad.length) {
+            warnEl.hidden = false;
+            warnEl.textContent = "Fix these folders before inserting a disc: " +
+                bad.map(function (row) { return row.label + " (" + (row.error || "not writable") + ")"; }).join(" · ");
+        } else {
+            warnEl.hidden = true;
+            warnEl.textContent = "";
+        }
+    }
+    const drives = Array.isArray(data.drives) ? data.drives : [];
+    if (drivesEl) {
+        if (!drives.length) {
+            drivesEl.innerHTML = "<div class=\"home-console-empty\">No optical drives found.</div>";
+        } else {
+            drivesEl.innerHTML = drives.map(function (drive) {
+                const tray = drive.tray || "unknown";
+                const mode = drive.mode || "auto";
+                const mount = drive.mount ? `<div class="home-console-meta">${escapeHomeText(drive.mount)}</div>` : "";
+                return `<div class="home-drive"><div class="home-drive-copy"><strong>${escapeHomeText(drive.name)}</strong>` +
+                    `${mount}</div><div class="home-drive-status"><span class="home-tray is-${escapeHomeText(tray)}">${escapeHomeText(tray)}</span>` +
+                    `<span class="home-console-meta">${escapeHomeText(mode)}</span></div></div>`;
+            }).join("");
+        }
+    }
 }
 
 /**
@@ -254,14 +369,9 @@ function checkActiveJobs(data, serverIndex) {
         activeJobs[AJIndex].active = false;
         // Loop through each result and search for our active job
         $.each(data.results, function (_index, job) {
-            console.log(`Looking for ${activeJobs[AJIndex].job_id}!==${serverIndex}_${job.job_id}`)
-            // We found a match for the current job id and the active job id
             if (activeJobs[AJIndex].job_id === `${serverIndex}_${job.job_id}`) {
-                console.log(`Match found for ${job.job_id}`)
                 activeJobs[AJIndex].active = true;
                 return false;
-            } else {
-                console.log(`No match: ${activeJobs[AJIndex].job_id}!==${serverIndex}_${job.job_id}`)
             }
         });
     });
@@ -276,9 +386,9 @@ function checkActiveJobs(data, serverIndex) {
  * @returns {*}
  */
 function refreshJobsSuccess(data, serverIndex, serverUrl, serverCount) {
+    renderHomeConsole(data);
     checkActiveJobs(data, serverIndex);
     $.each(data.results, function (_index, job) {
-        console.log(job.job_id)
         job.job_id = `${serverIndex}_${job.job_id}`;
         job.ripper = (data.arm_name ? data.arm_name : "");
         job.server_url = serverUrl;

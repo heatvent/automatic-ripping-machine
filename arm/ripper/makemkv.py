@@ -20,7 +20,13 @@ import subprocess
 from time import sleep, time
 
 import arm.config.config as cfg
-from arm.models import SystemDrives, Track
+from arm.config.makemkv_select import (
+    apply_default_selection,
+    choose_main_feature_track,
+    find_similar_movie_titles,
+    format_playlist_warning,
+)
+from arm.models import SystemDrives
 from arm.models.job import JobState
 from arm.ripper import utils
 from arm.ripper.utils import notify
@@ -667,11 +673,32 @@ def makemkv_mkv(job, rawpath):
     logging.info(f"Job running in {mode} mode")
     # Get track info form mkv rip
     get_track_info(job.drive.mdisc, job)
+    similar = warn_obfuscated_playlists(job)
+    if similar:
+        selected = wait_for_playlist_choice(job, similar)
+        db.session.expire_all()
+        utils.database_updater({"status": JobState.VIDEO_RIPPING.value}, job)
+        if len(selected) == 1:
+            track = selected[0]
+            db.session.refresh(track)
+            track.main_feature = True
+            db.session.commit()
+            rip_mainfeature(job, track, rawpath)
+        else:
+            process_single_tracks(job, rawpath, "manual")
+        return
     # route to ripping functions.
     if job.config.MAINFEATURE:
-        logging.info("Trying to find mainfeature (sorting by chapters desc, filesize desc, track_number asc)")
-        track = Track.query.filter_by(job_id=job.job_id).order_by(
-            Track.chapters.desc(), Track.filesize.desc(), Track.track_number.asc()).first()
+        track = choose_main_feature_track(list(job.tracks))
+        if track is None:
+            raise utils.RipperException("Main Feature Only is on, but MakeMKV found no titles")
+        track.main_feature = True
+        db.session.commit()
+        logging.info(
+            "Trying to find mainfeature (sorting by chapters desc, filesize desc, "
+            f"length desc, track_number asc). Picked title {track.track_number} "
+            f"({track.length}s, {track.chapters} chapters, {track.filesize} bytes)"
+        )
         rip_mainfeature(job, track, rawpath)
     elif mode == 'manual':  # Run if mode is manual, user selects tracks
         # Set job status to waiting
@@ -721,6 +748,11 @@ def makemkv(job):
     """
     # confirm MKV is working, beta key hasn't expired
     prep_mkv()
+    try:
+        selection = apply_default_selection(cfg.arm_config)
+        logging.info(f"MakeMKV selection rule: {selection}")
+    except OSError as error:
+        logging.warning(f"Could not write MakeMKV selection rule: {error}")
     logging.info(f"Starting MakeMKV rip. Method is {job.config.RIPMETHOD}")
     # get MakeMKV disc number
     # Fix: Check if job.drive is None before accessing job.drive.mdisc
@@ -867,22 +899,19 @@ def setup_rawpath(job, raw_path):
         str: modified path
     """
 
+    from arm.config.path_health import ensure_writable_dir
+
     logging.info(f"Destination is {raw_path}")
-    if not os.path.exists(raw_path):
-        try:
-            os.makedirs(raw_path)
-        except OSError:
-            err = f"Couldn't create the base file path: {raw_path}. Probably a permissions error"
-            logging.error(err)
-    else:
+    if os.path.exists(raw_path):
         logging.info(f"{raw_path} exists.  Adding timestamp.")
         raw_path = os.path.join(str(job.config.RAW_PATH), f"{job.title}_{job.stage}")
         logging.info(f"raw_path is {raw_path}")
-        try:
-            os.makedirs(raw_path)
-        except OSError:
-            err = f"Couldn't create the base file path: {raw_path}. Probably a permissions error"
-            raise OSError(err) from OSError
+    try:
+        ensure_writable_dir(raw_path)
+    except OSError as err:
+        raise OSError(
+            f"Couldn't create the base file path: {raw_path}. Probably a permissions error"
+        ) from err
     return raw_path
 
 
@@ -968,8 +997,8 @@ def progress_log(job):
 
     """
     logfile = os.path.join(job.config.LOGPATH, "progress", f"{job.job_id:d}.log")
-    logging.debug(f"logging progress to '{logfile}'")
-    return shlex.quote(logfile)
+    logging.debug(f"logging progress to {shlex.quote(logfile)}")
+    return logfile
 
 
 class TrackInfoProcessor:
@@ -1088,6 +1117,99 @@ def get_track_info(index, job):
     """
     processor = TrackInfoProcessor(job, index)
     processor.process_messages()
+
+
+PLAYLIST_WAIT_SECONDS = 300
+
+
+def _job_minlength(job):
+    if job.config is None:
+        return 0
+    try:
+        return int(job.config.MINLENGTH or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def warn_obfuscated_playlists(job):
+    """Notify when a Blu-ray looks like it repeats the movie playlist.
+
+    Returns the similar tracks, or an empty list.
+    """
+    if getattr(job, "disctype", "") != "bluray":
+        return []
+    if str(getattr(job, "video_type", "") or "").lower() == "series":
+        return []
+    tracks = list(job.tracks) if job.tracks is not None else []
+    similar = find_similar_movie_titles(tracks, _job_minlength(job))
+    if not similar:
+        return []
+    mainfeature = bool(getattr(job.config, "MAINFEATURE", False))
+    message = format_playlist_warning(similar, mainfeature=mainfeature)
+    logging.warning(message)
+    existing = job.errors or ""
+    combined = f"{existing}\n{message}".strip() if existing else message
+    utils.database_updater({"errors": combined}, job)
+    notify(job, "Possible playlist obfuscation", message)
+    return similar
+
+
+def wait_for_playlist_choice(job, similar_tracks):
+    """Pause for a Home/job-detail pick; fall back to the suggested title."""
+    from arm.models.track import Track
+
+    suggested = choose_main_feature_track(similar_tracks)
+    similar_ids = {getattr(track, "track_id", None) for track in similar_tracks}
+    for track in list(job.tracks or []):
+        track.process = False
+        track.main_feature = False
+    if suggested is not None:
+        suggested.process = True
+        suggested.main_feature = True
+    db.session.commit()
+    utils.database_updater({
+        "status": JobState.PLAYLIST_WAIT.value,
+        "manual_start": False,
+    }, job)
+    notify(
+        job,
+        "Pick a playlist title",
+        "This Blu-ray repeats the movie playlist. Choose a title on Home, "
+        "or ARM will use the suggested title in five minutes.",
+    )
+    logging.info(
+        "Waiting up to %ss for playlist selection on job %s (suggested title %s)",
+        PLAYLIST_WAIT_SECONDS,
+        job.job_id,
+        getattr(suggested, "track_number", None),
+    )
+    elapsed = 0
+    interval = 5
+    while elapsed < PLAYLIST_WAIT_SECONDS:
+        sleep(interval)
+        elapsed += interval
+        db.session.refresh(job)
+        if job.status == JobState.FAILURE.value:
+            raise utils.RipperException("Job abandoned while waiting for playlist selection")
+        if job.manual_start:
+            selected = Track.query.filter_by(job_id=job.job_id, process=True).all()
+            if selected:
+                logging.info(
+                    "Playlist selection received for job %s: %s",
+                    job.job_id,
+                    ",".join(str(track.track_number) for track in selected),
+                )
+                return selected
+            break
+    logging.info("Playlist wait timed out for job %s; using suggested title", job.job_id)
+    if suggested is not None:
+        db.session.refresh(suggested)
+        suggested.process = True
+        suggested.main_feature = True
+        db.session.commit()
+        return [suggested]
+    fallback = Track.query.filter(Track.job_id == job.job_id, Track.track_id.in_(similar_ids)).all()
+    return fallback[:1]
 
 
 def convert_to_seconds(hms_value):

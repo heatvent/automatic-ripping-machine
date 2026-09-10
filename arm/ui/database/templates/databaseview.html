@@ -10,13 +10,7 @@
         left: 200px;
     }
 </style>
-    <div class="container-fluid h-100 mx-auto">
-        <h1 class="page-heading">Database</h1>
-        <div class="row h-100 mx-auto align-items-center">
-            <div class="col-sm-12 mx-auto">
-                <h2 class="page-heading text-center">Database Entries</h2>
-            </div>
-        </div>
+    <div class="container-fluid h-100 mx-auto database-page">
         <!-- Modal -->
         <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle"
              aria-hidden="true">
@@ -51,10 +45,7 @@
         <div id="message1" class="alert alert-success d-none" role="alert">
             <p class="alert-heading">Job was deleted successfully</p>
         </div>
-        <div id="message2" class="alert alert-danger text-center">
-            <strong>WARNING: </strong>There is no undo here!
-            <br>Be careful!
-        </div>
+        <div id="message2" class="alert alert-danger text-center d-none" role="alert"></div>
         <div id="message3" class="alert alert-danger d-none" role="alert">
             <p class="alert-heading">There was a problem with your request</p>
             <p>There was a problem with your request. Check the ARMui log for more details.</p>
@@ -62,10 +53,10 @@
         <!-- Buttons -->
         <div class="row db-toolbar d-flex justify-content-end">
             <div class="p-4">
-                <button id="save-get-success" type="button" class="btn btn-sm btn-success">Get all successful
-                    jobs
+                <button id="save-get-success" type="button" class="btn btn-sm btn-success">Get All Successful
+                    Jobs
                 </button>
-                <button id="save-get-failed" type="button" class="btn btn-sm btn-danger">Get all failed jobs
+                <button id="save-get-failed" type="button" class="btn btn-sm btn-danger">Get All Failed Jobs
                 </button>
                 <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal"
                         data-type="search" data-href="json?mode=search&q=">Search Database
@@ -96,28 +87,25 @@
                                     </strong>
                                 </div>
                                 <!-- Card Body -->
-                                <div class="row no-gutters">
-                                    <div class="col-lg-4">
+                                <div class="job-card-body">
+                                    <div class="job-card-poster">
                                         {% if not job.poster_url or job.poster_url == "None" %}
                                             {% if job.video_type == "Music" %}
                                                 <a href="jobdetail?job_id={{ job.job_id }}"><img src="static/img/music.png"
-                                                                                                width="160"
-                                                                                                class="img-thumbnail"
+                                                                                                class="img-thumbnail job-card-cover"
                                                                                                 alt="No Poster Image"></a>
                                             {% else %}
                                                 <a href="jobdetail?job_id={{ job.job_id }}"><img src="static/img/none.png"
-                                                                                                width="160"
-                                                                                                class="img-thumbnail"
+                                                                                                class="img-thumbnail job-card-cover"
                                                                                                 alt="No Poster Image"></a>
                                             {% endif %}
                                         {% else %}
                                             <a href="jobdetail?job_id={{ job.job_id }}"><img src="{{ job.poster_url }}"
-                                                                                             width="160"
-                                                                                             class="img-thumbnail"
+                                                                                             class="img-thumbnail job-card-cover"
                                                                                              alt="Poster image"></a>
                                         {% endif %}
                                     </div>
-                                    <div class="col-lg-4">
+                                    <div class="job-card-details">
                                         <div class="card-body px-1 py-1">
                                             <strong>Type: </strong> {{ job.video_type }} <br>
                                             {% if not job.title_manual %}
@@ -136,7 +124,7 @@
                                             <strong>Job Time:</strong>{{ " Ongoing" if job.job_length is none else job.job_length }}<br>
                                         </div>
                                     </div>
-                                    <div class="col-lg-4">
+                                    <div class="job-card-side">
                                         <div class="card-body px-1 py-1">
                                             <div id="jobId{{ job.job_id }}_RIPMETHOD"><strong>Rip
                                                 Method: </strong>{{ job.config.RIPMETHOD }}</div>
@@ -149,11 +137,6 @@
                                         </div>
                                         <div class="card-body px-2 py-1">
                                             <div class="btn-group-vertical job-actions" role="group" aria-label="buttons">
-                                                <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
-                                                        data-target="#exampleModal" data-type="abandon"
-                                                        data-jobid="{{ job.job_id }}"
-                                                        data-href="json?job={{ job.job_id }}&mode=abandon">Abandon Job
-                                                </button>
                                                 <button type="button" class="btn btn-sm btn-primary" data-toggle="modal"
                                                         data-target="#exampleModal" data-type="delete"
                                                         data-jobid="{{ job.job_id }}"
@@ -175,7 +158,6 @@
                                             </div>
                                         </div>
                                     </div>
-
                                 </div>
                             </div>
                         </div>

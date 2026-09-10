@@ -1,17 +1,17 @@
 ## Overview
 
-Insert an optical disc (Blu-ray, DVD, CD) and checks to see if it's audio, video (Movie or TV), or data, then rips it.
+This **heatvent-2x** tree is a fork of [Automatic Ripping Machine](https://github.com/automatic-ripping-machine/automatic-ripping-machine). Insert an optical disc (Blu-ray, DVD, CD) and ARM checks whether it's audio, video (Movie or TV), or data, then rips it.
 
-See: https://b3n.org/automatic-ripping-machine for a more detailed breakdown of how the project started.
+See the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) for how this fork differs and how to install it. Upstream origin story: https://b3n.org/automatic-ripping-machine
 
 
 ## Supported Operating Systems
 
-ARM is available as both a [Docker image](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/docker) as well as in a natively installed version. 
+ARM on this fork is intended to run as a [Docker image built from source](Docker.md). Native install scripts still exist but are not the supported path. 
 
 ### Docker image
 
-Due to the nature of Docker, the container can be run on any platform that supports a Docker installation. Please refer to the [Docker documentation](https://docs.docker.com/engine/install/) for further information. The current main development effort is also going into the Docker container, for minimal issues in deployment and setup use the provided Docker image.
+Due to the nature of Docker, the container can run on any platform that supports Docker. See [Docker.md](Docker.md). Build this fork from source; do not pull the upstream Hub image if you want these changes.
 
 ### Native installation
 

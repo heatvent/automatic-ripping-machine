@@ -12,6 +12,31 @@ from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import db
 
 
+def tray_command_lists(mount, method):
+    """Return ``eject`` command variants, most specific first."""
+    if not mount:
+        return []
+    if method == "close":
+        return [
+            ["eject", "--verbose", "--trayclose", "--cdrom", "--scsi", mount],
+            ["eject", "--verbose", "--trayclose", "--cdrom", mount],
+            ["eject", "--verbose", "--trayclose", mount],
+            ["eject", "--verbose", "--traytoggle", "--cdrom", "--scsi", mount],
+        ]
+    if method == "toggle":
+        return [
+            ["eject", "--verbose", "--traytoggle", "--cdrom", "--scsi", mount],
+            ["eject", "--verbose", "--traytoggle", mount],
+            ["eject", "--verbose", "--cdrom", "--scsi", mount],
+        ]
+    return [
+        ["eject", "--verbose", "--cdrom", "--scsi", mount],
+        ["eject", "--verbose", "--cdrom", mount],
+        ["eject", "--verbose", mount],
+        ["eject", "--verbose", "--traytoggle", "--cdrom", "--scsi", mount],
+    ]
+
+
 class CDS(enum.Enum):
     """CD Status
 
@@ -204,36 +229,51 @@ class SystemDrives(db.Model):  # pylint: disable=too-many-instance-attributes
         """Drive has medium loaded and is ready for reading."""
         return self.tray == CDS.DISC_OK
 
-    def eject(self, method="eject"):
-        """Open or close the drive
+    def eject(self, method="eject", release_job=None):
+        """Open or close the drive.
 
-        Uses [eject](https://man7.org/linux/man-pages/man1/eject.1.html)
+        Tries several ``eject`` flag combinations. Tray status from the kernel
+        is often wrong on VMware passthrough, so callers should use explicit
+        ``eject`` or ``close`` rather than ``toggle``.
 
         Parameters
         ----------
-        logger: logging.Logger
-        method: str: eject (default), close, toggle
+        method: str
+            ``eject`` (open), ``close``, or ``toggle``
+        release_job: bool or None
+            Release the associated job after the command. Defaults to True
+            except for ``close``.
 
         Returns
         -------
         str or None
-            Returns `None` if no (known) error occurred and `str` with the error
-            message otherwise.
+            ``None`` on success, otherwise the last error message.
         """
-        methods = {
-            "eject": [],
-            "close": ["--trayclose"],
-            "toggle": ["--traytoggle"],
-        }
-        options = ["--cdrom", "--scsi"]  # exclude floppy and tape drives
-        cmd = ["eject", "--verbose"] + options + methods[method] + [self.mount]
-        try:
-            arm_subprocess(cmd, check=True)
-        except CalledProcessError as err:
-            details = err.stderr or err.output or str(err)
-            return details or f"eject failed with code {err.returncode}"
-        finally:
+        if release_job is None:
+            release_job = method != "close"
+        if not self.mount:
+            return "Drive has no mount path."
+        last_error = f"Unable to {method} {self.mount}"
+        if method == "eject":
+            try:
+                arm_subprocess(["umount", self.mount], check=False)
+            except OSError:
+                pass
+        for cmd in tray_command_lists(self.mount, method):
+            try:
+                arm_subprocess(cmd, check=True)
+                if release_job:
+                    self.release_current_job()
+                return None
+            except CalledProcessError as err:
+                last_error = err.output or err.stderr or str(err) or last_error
+                logging.warning(f"Tray command failed ({' '.join(cmd)}): {last_error}")
+            except OSError as err:
+                last_error = str(err)
+                logging.warning(f"Tray command failed ({' '.join(cmd)}): {last_error}")
+        if release_job:
             self.release_current_job()
+        return last_error
 
     def debug(self, logger=logging):
         """

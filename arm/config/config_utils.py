@@ -83,13 +83,14 @@ BOOLEAN_SETTING_KEYS = frozenset({
     "SET_MEDIA_PERMISSIONS", "SET_MEDIA_OWNER", "DELRAWFILES",
     "USE_FFMPEG", "MAINFEATURE", "EMBY_REFRESH", "NOTIFY_RIP",
     "NOTIFY_TRANSCODE", "NOTIFY_JOBID", "GET_VIDEO_TITLE",
+    "MKV_INCLUDE_CORE", "MKV_EXCLUDE_COMMENTARY",
 })
 
 ENUM_SETTING_CHOICES = {
     "RIPMETHOD": (
-        ("mkv", "MKV titles"),
-        ("backup", "Blu-ray disc backup"),
-        ("backup_dvd", "DVD backup extract"),
+        ("mkv", "MKV Titles"),
+        ("backup", "Blu-ray Disc Backup"),
+        ("backup_dvd", "DVD Backup Extract"),
     ),
     "VIDEOTYPE": (
         ("auto", "Auto"),
@@ -114,6 +115,49 @@ ENUM_SETTING_CHOICES = {
     "DEST_EXT": (
         ("mkv", "MKV"),
         ("mp4", "MP4"),
+    ),
+    "MKV_LANG": (
+        ("eng", "English"),
+        ("spa", "Spanish"),
+        ("fre", "French"),
+        ("ger", "German"),
+        ("ita", "Italian"),
+        ("jpn", "Japanese"),
+        ("kor", "Korean"),
+        ("chi", "Chinese"),
+        ("por", "Portuguese"),
+        ("rus", "Russian"),
+        ("dut", "Dutch"),
+        ("swe", "Swedish"),
+        ("nor", "Norwegian"),
+        ("dan", "Danish"),
+        ("fin", "Finnish"),
+        ("pol", "Polish"),
+        ("hun", "Hungarian"),
+        ("cze", "Czech"),
+        ("tur", "Turkish"),
+        ("ara", "Arabic"),
+        ("hin", "Hindi"),
+        ("tha", "Thai"),
+        ("ukr", "Ukrainian"),
+        ("gre", "Greek"),
+        ("heb", "Hebrew"),
+        ("vie", "Vietnamese"),
+    ),
+    "MKV_VIDEO": (
+        ("all", "All video"),
+        ("lang", "Language-tagged only"),
+    ),
+    "MKV_AUDIO": (
+        ("best", "Best one (lossless, else surround)"),
+        ("all", "All in this language"),
+        ("none", "None"),
+    ),
+    "MKV_SUBTITLES": (
+        ("one_plus_forced", "One + forced"),
+        ("all", "All in this language"),
+        ("forced", "Forced only"),
+        ("none", "None"),
     ),
 }
 

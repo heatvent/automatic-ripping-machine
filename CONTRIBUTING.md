@@ -1,4 +1,9 @@
 # Contributing Guide
-## Introduction
-Thank you for considering contributing to Automatic Ripping Machine (ARM). Your contributions help make ARM more accessible and user-friendly for everyone.
-For details on how to contribute see the [ARM Wiki Contribution Guide](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Contribute-Wiki)
+
+Thank you for considering a contribution.
+
+This repository is the **heatvent-2x** fork of [Automatic Ripping Machine](https://github.com/automatic-ripping-machine/automatic-ripping-machine). Open issues and pull requests here against the `heatvent-2x` branch.
+
+If a change belongs in the original project as well, please also send it upstream.
+
+General contribution notes for ARM: [upstream wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Contribute-Wiki).

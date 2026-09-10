@@ -21,6 +21,8 @@ from arm.config.config_utils import (  # noqa: E402
     yaml_is_true,
 )
 from arm.ui.utils import user_has_default_password  # noqa: E402
+from arm.ui.json_api import escape_sql_like  # noqa: E402
+from arm.ui.database.database import update_database  # noqa: E402
 
 
 class TestSecretMasking(unittest.TestCase):
@@ -154,6 +156,50 @@ class TestFfprobeNoShell(unittest.TestCase):
         self.assertEqual(args[0][0], "ffprobe")
         self.assertIn("/tmp/Disc Title.mkv", args[0])
         self.assertFalse(kwargs.get("shell", False))
+
+
+class TestMachineIp(unittest.TestCase):
+    def test_usable_ipv4_keeps_lan_and_drops_docker(self):
+        from arm.ui.utils import collect_unique_ipv4, format_machine_ip, usable_ipv4
+
+        self.assertTrue(usable_ipv4("192.168.68.118"))
+        self.assertTrue(usable_ipv4("10.0.0.5"))
+        self.assertFalse(usable_ipv4("127.0.0.1"))
+        self.assertFalse(usable_ipv4("0.0.0.0"))
+        self.assertFalse(usable_ipv4("172.17.0.2"))
+        self.assertFalse(usable_ipv4("x.x.x.x"))
+        self.assertEqual(
+            collect_unique_ipv4(["127.0.0.1", "172.17.0.2", "192.168.68.118", "192.168.68.118"]),
+            ["192.168.68.118"],
+        )
+        self.assertEqual(format_machine_ip(["192.168.68.118", "10.0.0.5"]), "192.168.68.118, 10.0.0.5")
+        self.assertEqual(format_machine_ip([]), "Not detected")
+
+    def test_url_and_env_host_parsing(self):
+        from arm.ui.utils import _ipv4_from_url_or_host, collect_unique_ipv4
+
+        self.assertEqual(_ipv4_from_url_or_host("http://192.168.0.10:8080"), "192.168.0.10")
+        self.assertEqual(_ipv4_from_url_or_host("192.168.0.10:8080"), "192.168.0.10")
+        self.assertIsNone(_ipv4_from_url_or_host("x.x.x.x"))
+        self.assertEqual(
+            collect_unique_ipv4([_ipv4_from_url_or_host("http://192.168.0.10:8080")]),
+            ["192.168.0.10"],
+        )
+
+
+class TestHistorySearchEscape(unittest.TestCase):
+    def test_keeps_spaces_and_hyphens(self):
+        self.assertEqual(escape_sql_like("Spider-Man"), "Spider-Man")
+        self.assertEqual(escape_sql_like("Lord of the Rings"), "Lord of the Rings")
+
+    def test_escapes_like_wildcards(self):
+        self.assertEqual(escape_sql_like("100%"), "100\\%")
+        self.assertEqual(escape_sql_like("title_cut"), "title\\_cut")
+
+
+class TestDbUpdateAuth(unittest.TestCase):
+    def test_dbupdate_requires_login(self):
+        self.assertTrue(hasattr(update_database, "__wrapped__"))
 
 
 if __name__ == "__main__":

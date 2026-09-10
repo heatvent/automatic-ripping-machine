@@ -1,12 +1,11 @@
 {% block general %}
     {% from 'macros/settings.html' import yaml_settings_form with context %}
     <div class="tab-pane active pt-5" id="general" role="tabpanel" aria-labelledby="general-tab">
-        <h4>General</h4>
         <nav class="settings-toc" aria-label="General setting groups">
             {% for group_id, group_title, group_keys in general_setting_groups %}
             <a href="#general-{{ group_id }}">{{ group_title }}</a>
             {% endfor %}
         </nav>
-        {{ yaml_settings_form('generalSettings', general_setting_groups, 'Save general settings', ripper_read_only, 'general') }}
+        {{ yaml_settings_form('generalSettings', general_setting_groups, 'Save General Settings', ripper_read_only, 'general') }}
     </div>
 {% endblock %}

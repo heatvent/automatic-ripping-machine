@@ -14,7 +14,7 @@ import json
 from pathlib import Path, PurePath
 from werkzeug.exceptions import HTTPException
 from flask import Flask, render_template, request, flash, \
-    redirect, url_for, session   # noqa: F401
+    redirect, url_for, session, send_from_directory   # noqa: F401
 from flask.logging import default_handler  # noqa: F401
 from flask_login import LoginManager, login_required, \
     current_user, login_user, logout_user  # noqa: F401
@@ -33,6 +33,16 @@ armui_cfg = ui_utils.arm_db_cfg()
 # Define the Flask login manager
 login_manager = LoginManager()
 login_manager.init_app(app)
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve the disc favicon from the site root so browsers pick it up."""
+    return send_from_directory(
+        os.path.join(app.static_folder, 'img'),
+        'favicon.ico',
+        mimetype='image/vnd.microsoft.icon',
+    )
 
 
 @app.route('/')

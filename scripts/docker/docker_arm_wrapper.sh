@@ -57,4 +57,7 @@ else
 	  echo "$(date) [ARM] Starting ARM for unknown disc type on ${DEVNAME}" >> "$ARMLOG"
 fi
 cd /home/arm
-python3 /opt/arm/arm/ripper/main.py -d "${DEVNAME}" | logger -t ARM -s
+export PYTHONUNBUFFERED=1
+# Python already writes arm.log, the job log, and syslog. Do not tee or pipe
+# through logger: that duplicated every line in arm.log (FileHandler + stdout).
+python3 /opt/arm/arm/ripper/main.py -d "${DEVNAME}"

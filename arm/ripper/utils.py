@@ -28,6 +28,7 @@ from arm.models.track import Track
 from arm.models.user import User
 from arm.models.system_drives import SystemDrives
 from arm.ripper import apprise_bulk
+from arm.title_format import clean_for_filename
 
 NOTIFY_TITLE = "ARM notification"
 
@@ -197,17 +198,12 @@ def fix_job_title(job):
     :param job:
     :return: corrected job.title
     """
+    base = job.title_manual or job.title or ""
     if job.year and job.year != "0000" and job.year != "":
-        if job.title_manual:
-            job_title = f"{job.title_manual} ({job.year})"
-        else:
-            job_title = f"{job.title} ({job.year})"
+        job_title = f"{base} ({job.year})"
     else:
-        if job.title_manual:
-            job_title = f"{job.title_manual}"
-        else:
-            job_title = f"{job.title}"
-    return job_title
+        job_title = str(base)
+    return clean_for_filename(job_title)
 
 
 #  ############## Start of post processing functions
@@ -465,6 +461,67 @@ def find_largest_file(files, mkv_out_path):
     return largest_file_name
 
 
+def abcde_output_dir():
+    """Folder abcde writes ripped CDs into, from abcde.conf."""
+    from arm.ui.settings.abcde_utils import parse_abcde_values
+    values, _ = parse_abcde_values(getattr(cfg, "abcde_config", "") or "")
+    path = (values.get("OUTPUTDIR") or "").strip()
+    return os.path.expanduser(path) if path else ""
+
+
+def promote_album_cover(output_dir, max_age_seconds=7200):
+    """Copy a freshly ripped abcde cover.jpg next to the tracks.
+
+    abcde leaves cover art in albumart_backup/ after embedalbumart. Media
+    servers look for cover.jpg beside the files.
+    """
+    if not output_dir or not os.path.isdir(output_dir):
+        return 0
+    copied = 0
+    cutoff = time.time() - max_age_seconds
+    output_dir = os.path.abspath(output_dir)
+    for dirpath, dirnames, filenames in os.walk(output_dir):
+        rel = os.path.relpath(dirpath, output_dir)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        if depth > 4:
+            dirnames[:] = []
+            continue
+        if os.path.basename(dirpath) != "albumart_backup":
+            continue
+        cover_name = next(
+            (name for name in ("cover.jpg", "cover.jpeg", "cover.png") if name in filenames),
+            None,
+        )
+        if not cover_name:
+            continue
+        src = os.path.join(dirpath, cover_name)
+        try:
+            if os.path.getmtime(src) < cutoff:
+                continue
+        except OSError:
+            continue
+        dest = os.path.join(os.path.dirname(dirpath), cover_name)
+        if os.path.isfile(dest):
+            continue
+        try:
+            shutil.copy2(src, dest)
+        except OSError as error:
+            logging.debug(f"Could not copy album cover to {dest}: {error}")
+            continue
+        logging.info(f"Copied album cover to {dest}")
+        copied += 1
+    return copied
+
+
+def abcde_rip_command(devpath, logfile, logpath, abcfile=None):
+    """Build the unattended abcde command. ``-N`` never waits for a prompt."""
+    log_target = os.path.join(logpath, logfile)
+    cmd = f'abcde -N -d "{devpath}"'
+    if abcfile and os.path.isfile(abcfile):
+        cmd += f' -c {abcfile}'
+    return f'{cmd} >> "{log_target}" 2>&1'
+
+
 def rip_music(job, logfile):
     """
     Rip music CD using abcde config\n
@@ -476,11 +533,12 @@ def rip_music(job, logfile):
     abcfile = cfg.arm_config["ABCDE_CONFIG_FILE"]
     if job.disctype == "music":
         logging.info("Disc identified as music")
-        # If user has set a cfg.arm_config file with ARM use it
-        if os.path.isfile(abcfile):
-            cmd = f'abcde -d "{job.devpath}" -c {abcfile} >> "{os.path.join(job.config.LOGPATH, logfile)}" 2>&1'
-        else:
-            cmd = f'abcde -d "{job.devpath}" >> "{os.path.join(job.config.LOGPATH, logfile)}" 2>&1'
+        cmd = abcde_rip_command(
+            job.devpath,
+            logfile,
+            job.config.LOGPATH,
+            abcfile if os.path.isfile(abcfile) else None,
+        )
 
         logging.debug(f"Sending command: {cmd}")
         args = {"status": JobState.AUDIO_RIPPING.value}
@@ -490,6 +548,7 @@ def rip_music(job, logfile):
             # TODO check output and confirm all tracks ripped; find "Finished\.$"
             subprocess.check_output(cmd, shell=True).decode("utf-8")
             logging.info("abcde call successful")
+            promote_album_cover(abcde_output_dir())
             return True
         except subprocess.CalledProcessError as ab_error:
             err = f"Call to abcde failed with code: {ab_error.returncode} ({ab_error.output})"
@@ -636,8 +695,27 @@ def put_track(job, t_no, seconds, aspect, fps, mainfeature, source, filename="",
         chapters=chapters,
         filesize=filesize
     )
-    job_track.ripped = (seconds > int(job.config.MINLENGTH))
+    job_track.ripped = track_meets_minlength(job, seconds, source)
     database_adder(job_track)
+
+
+def track_meets_minlength(job, seconds, source=""):
+    """True if this track is long enough to keep, or is a music-CD track."""
+    if str(source).upper() == "ABCDE":
+        return True
+    raw = None
+    try:
+        if getattr(job, "config", None) is not None:
+            raw = job.config.MINLENGTH
+    except AttributeError:
+        raw = None
+    if raw is None:
+        raw = cfg.arm_config.get("MINLENGTH", 0)
+    try:
+        minlength = int(raw)
+    except (TypeError, ValueError):
+        minlength = 0
+    return seconds > minlength
 
 
 def arm_setup(arm_log: Logger) -> None:
@@ -655,9 +733,15 @@ def arm_setup(arm_log: Logger) -> None:
     # Check if DB file is writeable
     if not os.access(cfg.arm_config['DBFILE'], os.W_OK):
         arm_log.critical(f"Can't write to database file: {cfg.arm_config['DBFILE']}")
+    from arm.config.path_health import ensure_writable_dir
+
     # Check directories for read/write permission -> create if they don't exist
     for folder in arm_directories:
-        os.makedirs(folder, exist_ok=True)
+        try:
+            ensure_writable_dir(folder, arm_log)
+        except OSError as err:
+            arm_log.critical(f"Can't use folder: {folder} ({err})")
+            raise
         if not os.access(folder, os.R_OK):
             arm_log.error(f"Can't read from folder: {folder}")
         if not os.access(folder, os.W_OK):
@@ -774,19 +858,6 @@ def check_ip():
     if len(ip_list) > 0:
         return ip_list[0]
     return '127.0.0.1'
-
-
-def clean_for_filename(string):
-    """ Cleans up string for use in filename """
-    string = re.sub('\\[(.*?)]', '', string)
-    string = re.sub('\\s+', '-', string)
-    string = string.replace(' : ', ' - ')
-    string = string.replace(':', '-')
-    string = string.replace('&', 'and')
-    string = string.replace("\\", " - ")
-    string = string.replace(" ", " - ")
-    string = string.strip()
-    return re.sub('[^\\w.() -]', '', string)
 
 
 def duplicate_run_check(dev_path):

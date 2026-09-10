@@ -2,44 +2,56 @@
 
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/job_details.css') }}">
-<style>
-    @media only screen and (max-width: 760px),
-    (min-device-width: 768px) and (max-device-width: 1024px) {
-        td:nth-of-type(1):before {
-            content: "Start Time:\A";
-        }
+<div class="container content jobs-page">
+    <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle"
+         aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLongTitle">Delete This Job Forever?</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p id="m-body">This item will be permanently deleted and cannot be recovered. Are you sure?</p>
+                </div>
+                <div class="modal-footer">
+                    <button id="save-no" type="button" class="btn btn-secondary" data-dismiss="modal">No</button>
+                    <button id="save-yes" type="button" class="btn btn-primary">Yes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="message1" class="alert alert-success d-none" role="alert">
+        <p class="alert-heading">Job was deleted successfully</p>
+    </div>
+    <div id="message2" class="alert alert-danger text-center d-none" role="alert"></div>
+    <div id="message3" class="alert alert-danger d-none" role="alert">
+        <p class="alert-heading">There was a problem with your request</p>
+    </div>
 
-        td:nth-of-type(3):before {
-            content: "Duration:";
-        }
+    <div class="row db-toolbar jobs-toolbar align-items-center">
+        <div class="col-md-5 mb-2">
+            <input type="search" class="form-control form-control-sm" id="searchquery"
+                   placeholder="Search titles" autocomplete="off">
+        </div>
+        <div class="col-md-7 mb-2 text-md-right jobs-filters">
+            <button id="save-get-all" type="button" class="btn btn-sm btn-secondary">All</button>
+            <button id="save-get-success" type="button" class="btn btn-sm btn-success">Successful</button>
+            <button id="save-get-failed" type="button" class="btn btn-sm btn-danger">Failed</button>
+        </div>
+    </div>
 
-        td:nth-of-type(3):after {
-            content: " (h:mm:ss)";
-        }
-
-        td:nth-of-type(4):before {
-            content: "Status:";
-        }
-
-        td:nth-of-type(5):before {
-            content: "Log:\A";
-        }
-    }
-
-    .hidden {
-        display: none;
-    }
-</style>
-<div class="container content">
     <div class="row">
         <div class="col-12">
             <div class="table-responsive">
                 <div class="jumbotron">
-                    {% with pages=pages, page_name="route_history.history" %}
+                    {% with pages=pages, page_name="route_jobs.view_jobs" %}
                         {% include "pagination.html" %}
                     {% endwith %}
                     <div class="row">
-                        <table class="table table-striped">
+                        <table class="table table-striped" id="jobsTable">
                             <caption>Previous rips — open a log from the rip it belongs to</caption>
                             <thead class="tablesorterhead thead-dark">
                             <tr>
@@ -48,17 +60,17 @@
                                 <th scope="col" style="cursor: pointer;">Duration</th>
                                 <th scope="col" style="cursor: pointer;">Status</th>
                                 <th scope="col" data-sorter="false">Log</th>
+                                <th scope="col" data-sorter="false">Actions</th>
                             </tr>
                             </thead>
-                            <tbody>
+                            <tbody class="jobs-tbody">
                             {% from 'macros/icons.html' import status_badge %}
                             {% for job in jobs %}
-                            <tr>
+                            <tr id="job-row-{{ job.job_id }}">
                                 <th scope="row" class="text-wrap"><a href="jobdetail?job_id={{ job.job_id }}">{{
                                     job.title|truncate(50, True) if job.title is not none else 'Title unknown' }}</a>
                                 </th>
                                 <td>{{ job.start_time.strftime(date_format) if job.start_time is not none }}</td>
-                                <td class="hidden">{{ job.start_time if job.start_time is not none }}</td>
                                 <td>{{ job.job_length }}</td>
                                 <td>{{ status_badge(job.status) }}</td>
                                 <td class="log-actions">
@@ -71,12 +83,18 @@
                                         —
                                     {% endif %}
                                 </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-primary job-actions"
+                                            data-toggle="modal" data-target="#exampleModal" data-type="delete"
+                                            data-jobid="{{ job.job_id }}"
+                                            data-href="json?job={{ job.job_id }}&mode=delete">Delete</button>
+                                </td>
                             </tr>
                             {% endfor %}
                             </tbody>
                         </table>
                     </div>
-                    {% with pages=pages, page_name="route_history.history" %}
+                    {% with pages=pages, page_name="route_jobs.view_jobs" %}
                         {% include "pagination.html" %}
                     {% endwith %}
                 </div>
@@ -127,10 +145,12 @@
 {% block js %}
     {{ super() }}
     <script src="{{ url_for('static', filename='js/jquery.tablesorter.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}?v={{ arm_version|default('1') }}"></script>
+    <script src="{{ url_for('static', filename='js/jobs.js') }}?v={{ arm_version|default('1') }}"></script>
     <script type="application/javascript">
         $(document).ready(function () {
             $("table").tablesorter({});
         });
-        activeTab("history");
+        activeTab("jobs");
     </script>
 {% endblock %}

@@ -9,14 +9,14 @@
 
         .popover-body {
             white-space: pre-wrap;
-            font-weight: bold;
+            font-weight: 400;
         }
     </style>
     <div class="alert alert-success d-none" role="alert" id="success">
-        <p class="alert-heading">Settings were saved successfully</p>
+        <p class="alert-heading">Settings Were Saved Successfully</p>
     </div>
     <div class="alert alert-danger d-none" role="alert" id="fail">
-        <p class="alert-heading">There was an error saving settings</p>
+        <p class="alert-heading">There Was an Error Saving Settings</p>
     </div>
     <div class="container" style="max-width: initial!important;">
         <div class="row">
@@ -156,6 +156,7 @@
             })
             $(".popovers").popover({
                 trigger: "hover",
+                html: true,
             });
             {% if form.errors %}
                 {% for k in form.errors %}

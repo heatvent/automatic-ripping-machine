@@ -2,9 +2,9 @@
 # setup default directories and configs
 FROM automaticrippingmachine/arm-dependencies:1.8.0 AS base
 
-LABEL org.opencontainers.image.source=https://github.com/automatic-ripping-machine/automatic-ripping-machine
+LABEL org.opencontainers.image.source=https://github.com/heatvent/automatic-ripping-machine
 LABEL org.opencontainers.image.license=MIT
-LABEL org.opencontainers.image.description='Automatic Ripping Machine for fully automated Blu-ray, DVD and audio disc ripping.'
+LABEL org.opencontainers.image.description='heatvent-2x fork of Automatic Ripping Machine for Blu-ray, DVD and audio disc ripping.'
 
 EXPOSE 8080
 

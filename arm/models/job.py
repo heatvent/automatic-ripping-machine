@@ -73,6 +73,8 @@ class JobState(str, enum.Enum):
     """Indicate that the job waits for user input or for the next queue slot."""
     VIDEO_INFO = "info"
     """Indicate that the job calls makemkv info"""
+    PLAYLIST_WAIT = "waiting_playlist"
+    """Blu-ray playlist clones detected; waiting for a title pick."""
 
     # Audio ripping states
     AUDIO_RIPPING = "ripping"
@@ -92,11 +94,38 @@ JOB_STATUS_RIPPING = {
     JobState.MANUAL_WAIT_STARTED,
     JobState.VIDEO_WAITING,
     JobState.VIDEO_INFO,
+    JobState.PLAYLIST_WAIT,
 }
 JOB_STATUS_TRANSCODING = {
     JobState.TRANSCODE_ACTIVE,
     JobState.TRANSCODE_WAITING,
 }
+
+STATUS_LABELS = {
+    "success": "Success",
+    "fail": "Failed",
+    "waiting_manual": "Waiting for Title",
+    "waiting_playlist": "Pick Playlist",
+    "active": "Active",
+    "ripping": "Ripping",
+    "waiting": "Waiting",
+    "info": "Reading Disc",
+    "transcoding": "Transcoding",
+    "waiting_transcode": "Waiting to Transcode",
+    "yes": "Yes",
+    "no": "No",
+}
+
+
+def status_label(status):
+    """Human Title Case label for a job or sysinfo status value."""
+    if status is None:
+        return ""
+    text = str(status)
+    mapped = STATUS_LABELS.get(text.lower())
+    if mapped:
+        return mapped
+    return text.replace("_", " ").title()
 
 
 def job_has_terminal_status(status):
@@ -156,6 +185,18 @@ def serialize_model_value(value):
     if value is None:
         return None
     return str(value)
+
+
+def persist_job_session():
+    """Commit eject/drive release so the UI and the next udev job see it."""
+    try:
+        db.session.commit()
+    except Exception as err:  # noqa: BLE001
+        logging.error("Unable to persist job/drive eject state: %s", err)
+        try:
+            db.session.rollback()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class Job(db.Model):
@@ -352,7 +393,8 @@ class Job(db.Model):
             logging.warning("No drive was backpopulated with this job!")
             if not cfg.arm_config['AUTO_EJECT']:
                 logging.info("Skipping auto eject")
-                self.ejected = False
+                self.ejected = True
+                persist_job_session()
                 return
             try:
                 subprocess.run(
@@ -365,10 +407,13 @@ class Job(db.Model):
                 logging.error(f"Unable to eject {self.devpath} without a drive row: {err}")
                 return
             self.ejected = True
+            persist_job_session()
             return
         if not cfg.arm_config['AUTO_EJECT']:
             logging.info("Skipping auto eject")
-            self.drive.release_current_job()  # release job without ejecting
+            self.drive.release_current_job()
+            self.ejected = True
+            persist_job_session()
             return
 
         last_error = None
@@ -377,6 +422,7 @@ class Job(db.Model):
             if not last_error:
                 self.ejected = True
                 logging.info(f"Ejected {self.devpath} on attempt {attempt}/{retries}")
+                persist_job_session()
                 return
             logging.warning(
                 f"Eject attempt {attempt}/{retries} failed for {self.devpath}: {last_error}"
@@ -384,6 +430,7 @@ class Job(db.Model):
             if attempt < retries:
                 time.sleep(delay)
         logging.error(f"Unable to eject {self.devpath} after {retries} attempts: {last_error}")
+        persist_job_session()
 
     @hybrid_property
     def finished(self):

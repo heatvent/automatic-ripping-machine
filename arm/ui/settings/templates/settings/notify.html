@@ -1,14 +1,13 @@
 {% block notify %}
     {% from 'macros/settings.html' import yaml_settings_form with context %}
     <div class="tab-pane pt-5" id="notifications" role="tabpanel" aria-labelledby="notifications-tab">
-        <h4>Notifications</h4>
         <nav class="settings-toc" aria-label="Notification sections">
             {% for group_id, group_title, group_keys in notify_setting_groups %}
             <a href="#notify-{{ group_id }}">{{ group_title }}</a>
             {% endfor %}
-            <a href="#apprise-config">Apprise config</a>
+            <a href="#apprise-config">Apprise Config</a>
         </nav>
-        {{ yaml_settings_form('notifySettings', notify_setting_groups, 'Save notification settings', ripper_read_only, 'notify') }}
+        {{ yaml_settings_form('notifySettings', notify_setting_groups, 'Save Notification Settings', ripper_read_only, 'notify') }}
         {% include 'settings/apprise.html' %}
     </div>
 {% endblock %}

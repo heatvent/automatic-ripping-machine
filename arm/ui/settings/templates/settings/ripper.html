@@ -1,12 +1,11 @@
 {% block ripper %}
     {% from 'macros/settings.html' import yaml_settings_form with context %}
     <div class="tab-pane pt-5" id="ripper" role="tabpanel" aria-labelledby="ripper-tab">
-        <h4>Movie Ripper</h4>
         <nav class="settings-toc" aria-label="Movie ripper setting groups">
             {% for group_id, group_title, group_keys in ripper_setting_groups %}
             <a href="#ripper-{{ group_id }}">{{ group_title }}</a>
             {% endfor %}
         </nav>
-        {{ yaml_settings_form('ripperSettings', ripper_setting_groups, 'Save movie ripper settings', ripper_read_only, 'ripper') }}
+        {{ yaml_settings_form('ripperSettings', ripper_setting_groups, 'Save Movie Ripper Settings', ripper_read_only, 'ripper') }}
     </div>
 {% endblock %}

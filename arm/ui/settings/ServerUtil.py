@@ -17,6 +17,8 @@ class ServerUtil():
     memory_used = 0.0
     memory_percent = 0.0
     # Hard drive space
+    storage_raw_free = 0
+    storage_raw_percent = 0.0
     storage_transcode_free = 0
     storage_transcode_percent = 0.0
     storage_completed_free = 0
@@ -29,6 +31,8 @@ class ServerUtil():
         self.get_cpu_util()
         self.get_cpu_temp()
         self.get_memory()
+        self.storage_raw_free, self.storage_raw_percent = \
+            self.get_disk_space(cfg.arm_config['RAW_PATH'])
         self.storage_transcode_free, self.storage_transcode_percent = \
             self.get_disk_space(cfg.arm_config['TRANSCODE_PATH'])
         self.storage_completed_free, self.storage_completed_percent = \
@@ -90,15 +94,19 @@ class ServerUtil():
     def get_disk_space(self, filepath):
         # Hard drive space
         try:
-            disk_space = psutil.disk_usage(filepath).free
-            disk_space = round(disk_space / 1073741824, 1)
-            disk_percent = psutil.disk_usage(filepath).percent
-        except FileNotFoundError:
+            usage = psutil.disk_usage(filepath)
+            disk_space = round(usage.free / 1073741824, 1)
+            disk_percent = usage.percent
+        except OSError as error:
+            # Missing folders, disconnected VMware/NFS shares (errno 107), etc.
             disk_space = 0
             disk_percent = 0
-            app.logger.debug("ARM folders not found")
-            flash("There was a problem accessing the ARM folder: "
-                  f"'{filepath}'. Please make sure you have setup ARM", "danger")
+            app.logger.warning("Unable to read disk space for %s: %s", filepath, error)
+            flash(
+                f"There was a problem accessing the ARM folder: '{filepath}' ({error}). "
+                "Storage stats for this path are unavailable.",
+                "danger",
+            )
         app.logger.debug(f"Server {filepath} Space:  {disk_space}")
         app.logger.debug(f"Server {filepath} Percent:  {disk_percent}")
         return disk_space, disk_percent

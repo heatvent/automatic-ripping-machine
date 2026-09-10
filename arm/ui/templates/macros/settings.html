@@ -4,17 +4,16 @@
 <div class="input-group-prepend setting-caption">
     <span class="input-group-text" id="{{ key }}">
         <span class="setting-name">{{ label }}</span>
-        <span class="setting-key">{{ key }}</span>
     </span>
 </div>
 {% endmacro %}
 
 {% macro setting_info(key, help_text, label=None) %}
 <a class="popovers" onClick="return false;" href=""
-   data-content="{{ help_text|replace('#', '\n') }}"
+   data-content="{{ format_setting_help(key, help_text)|e }}"
    rel="popover"
    data-placement="top"
-   data-original-title="{{ label or key }}">
+   data-original-title="{{ (label or setting_label(key))|e }}">
     {{ info_icon() }}
 </a>
 {% endmacro %}
@@ -78,7 +77,7 @@
         {% endfor %}
     </section>
     {% endfor %}
-    <button class="btn btn-secondary btn-lg btn-block" form="{{ form_id }}"
+    <button class="btn btn-secondary btn-lg btn-block settings-save" form="{{ form_id }}"
             type="submit"{% if read_only %} disabled{% endif %}>{{ submit_label }}
     </button>
 </form>

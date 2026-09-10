@@ -5,6 +5,7 @@ import os
 import yaml
 
 import arm.config.config_utils as config_utils
+from arm.config.makemkv_select import apply_selection_defaults
 
 arm_config: dict[str, str]
 arm_config_path: str = os.environ.get("ARM_CONFIG_FILE", "/etc/arm/config/arm.yaml")
@@ -37,6 +38,7 @@ arm_config = _load_config(os.path.join(cur_cfg["INSTALLPATH"], "setup/arm.yaml")
 
 # Update the template config with the user's values
 arm_config.update(cur_cfg)
+apply_selection_defaults(arm_config)
 
 try:
     # Save the dictionary

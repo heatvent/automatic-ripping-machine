@@ -1,5 +1,7 @@
 """Friendly labels, grouping, and validation for ARM settings UI."""
 
+import html as html_module
+
 from arm.config.config_utils import (
     BOOLEAN_SETTING_KEYS,
     ENUM_SETTING_CHOICES,
@@ -7,89 +9,95 @@ from arm.config.config_utils import (
 )
 
 SETTING_LABELS = {
-    "ARM_NAME": "Machine name",
-    "ARM_CHILDREN": "Child ARM servers",
+    "ARM_NAME": "Machine Name",
+    "ARM_CHILDREN": "Child ARM Servers",
     "PREVENT_99": "Block DVD Track 99 DRM",
-    "ARM_CHECK_UDF": "Identify UDF data vs video",
-    "GET_VIDEO_TITLE": "Look up video titles",
-    "ARM_API_KEY": "ARM title API key",
-    "DISABLE_LOGIN": "Disable UI login",
-    "SKIP_TRANSCODE": "Skip transcoding",
-    "VIDEOTYPE": "Video type",
-    "MINLENGTH": "Minimum title length (seconds)",
-    "MAXLENGTH": "Maximum title length (seconds)",
-    "MANUAL_WAIT": "Wait for manual title",
-    "MANUAL_WAIT_TIME": "Manual wait time (seconds)",
-    "DATE_FORMAT": "Date format",
-    "ALLOW_DUPLICATES": "Allow duplicate rips",
-    "MAX_CONCURRENT_TRANSCODES": "Max concurrent transcodes",
-    "MAX_CONCURRENT_MAKEMKVINFO": "Max concurrent MakeMKV info",
-    "DATA_RIP_PARAMETERS": "Data disc extra arguments",
-    "METADATA_PROVIDER": "Metadata provider",
-    "GET_AUDIO_TITLE": "CD title source",
-    "RIP_POSTER": "Rip DVD jacket poster",
-    "AUTO_EJECT": "Eject when finished",
-    "ABCDE_CONFIG_FILE": "CD ripper config file",
-    "RAW_PATH": "Raw rip folder",
-    "TRANSCODE_PATH": "Transcode folder",
-    "COMPLETED_PATH": "Completed folder",
-    "EXTRAS_SUB": "Extras subfolder name",
-    "INSTALLPATH": "ARM install path",
-    "LOGPATH": "Log folder",
-    "LOGLEVEL": "Log level",
-    "LOGLIFE": "Keep logs (days)",
-    "DBFILE": "Database file",
-    "WEBSERVER_IP": "UI bind address",
-    "WEBSERVER_PORT": "UI port",
+    "ARM_CHECK_UDF": "Identify UDF Data vs Video",
+    "GET_VIDEO_TITLE": "Look Up Video Titles",
+    "ARM_API_KEY": "ARM Title API Key",
+    "DISABLE_LOGIN": "Disable UI Login",
+    "SKIP_TRANSCODE": "Skip Transcoding",
+    "VIDEOTYPE": "Video Type",
+    "MINLENGTH": "Minimum Title Length (s)",
+    "MAXLENGTH": "Maximum Title Length (s)",
+    "MANUAL_WAIT": "Wait for Manual Title",
+    "MANUAL_WAIT_TIME": "Manual Wait Time (s)",
+    "DATE_FORMAT": "Date Format",
+    "ALLOW_DUPLICATES": "Allow Duplicate Rips",
+    "MAX_CONCURRENT_TRANSCODES": "Max Concurrent Transcodes",
+    "MAX_CONCURRENT_MAKEMKVINFO": "Max Concurrent Rips",
+    "DATA_RIP_PARAMETERS": "Data Disc Extra Arguments",
+    "METADATA_PROVIDER": "Metadata Provider",
+    "GET_AUDIO_TITLE": "CD Title Source",
+    "RIP_POSTER": "Rip DVD Jacket Poster",
+    "AUTO_EJECT": "Eject When Finished",
+    "ABCDE_CONFIG_FILE": "CD Ripper Config File",
+    "RAW_PATH": "Raw Rip Folder",
+    "TRANSCODE_PATH": "Transcode Folder",
+    "COMPLETED_PATH": "Completed Folder",
+    "EXTRAS_SUB": "Extras Subfolder Name",
+    "INSTALLPATH": "ARM Install Path",
+    "LOGPATH": "Log Folder",
+    "LOGLEVEL": "Log Level",
+    "LOGLIFE": "Keep Logs (Days)",
+    "DBFILE": "Database File",
+    "WEBSERVER_IP": "UI Bind Address",
+    "WEBSERVER_PORT": "UI Port",
     "UI_BASE_URL": "Public UI URL",
-    "SET_MEDIA_PERMISSIONS": "Set file permissions",
-    "CHMOD_VALUE": "Permission mode",
-    "SET_MEDIA_OWNER": "Set file owner",
-    "CHOWN_USER": "Owner username",
-    "CHOWN_GROUP": "Owner group",
-    "MAKEMKV_PERMA_KEY": "MakeMKV license key",
-    "RIPMETHOD": "Rip method",
-    "MKV_ARGS": "Extra MakeMKV arguments",
-    "DELRAWFILES": "Delete temporary rip files",
-    "HB_PRESET_DVD": "DVD preset",
-    "HB_PRESET_BD": "Blu-ray preset",
-    "DEST_EXT": "Output file type",
-    "HANDBRAKE_CLI": "HandBrake program",
-    "HANDBRAKE_LOCAL": "Local HandBrake program",
-    "FFMPEG_PRE_FILE_ARGS": "FFmpeg arguments before input",
-    "FFMPEG_POST_FILE_ARGS": "FFmpeg arguments after input",
-    "FFMPEG_CLI": "FFmpeg program",
-    "FFMPEG_LOCAL": "Local FFmpeg program",
-    "USE_FFMPEG": "Use FFmpeg instead of HandBrake",
-    "MAINFEATURE": "Main feature only",
-    "HB_ARGS_DVD": "Extra DVD arguments",
-    "HB_ARGS_BD": "Extra Blu-ray arguments",
-    "EMBY_REFRESH": "Refresh Emby library",
-    "EMBY_SERVER": "Emby server",
-    "EMBY_PORT": "Emby port",
-    "EMBY_CLIENT": "Emby client name",
-    "EMBY_DEVICE": "Emby device name",
-    "EMBY_DEVICEID": "Emby device id",
-    "EMBY_USERNAME": "Emby username",
-    "EMBY_USERID": "Emby user id",
-    "EMBY_PASSWORD": "Emby password hash",
-    "EMBY_API_KEY": "Emby API key",
-    "NOTIFY_RIP": "Notify when rip finishes",
-    "NOTIFY_TRANSCODE": "Notify when transcode finishes",
-    "NOTIFY_JOBID": "Include job id in notifications",
-    "PB_KEY": "Pushbullet key",
-    "IFTTT_KEY": "IFTTT key",
-    "IFTTT_EVENT": "IFTTT event name",
-    "PO_USER_KEY": "Pushover user key",
-    "PO_APP_KEY": "Pushover app key",
-    "BASH_SCRIPT": "Notification script",
-    "OMDB_API_KEY": "OMDb API key",
-    "TMDB_API_KEY": "TMDb API key",
-    "JSON_URL": "JSON webhook URL",
-    "APPRISE": "Apprise config file",
-    "index_refresh": "Home refresh interval (ms)",
-    "database_limit": "Jobs per page",
-    "notify_refresh": "Notification display time (ms)",
+    "SET_MEDIA_PERMISSIONS": "Set File Permissions",
+    "CHMOD_VALUE": "Permission Mode",
+    "SET_MEDIA_OWNER": "Set File Owner",
+    "CHOWN_USER": "Owner Username",
+    "CHOWN_GROUP": "Owner Group",
+    "MAKEMKV_PERMA_KEY": "License Key",
+    "RIPMETHOD": "Rip Method",
+    "MKV_LANG": "Language",
+    "MKV_VIDEO": "Video",
+    "MKV_AUDIO": "Audio",
+    "MKV_INCLUDE_CORE": "Include HD Core",
+    "MKV_EXCLUDE_COMMENTARY": "Exclude Commentary",
+    "MKV_SUBTITLES": "Subtitles",
+    "MKV_ARGS": "Extra Arguments",
+    "DELRAWFILES": "Delete Temporary Rip Files",
+    "HB_PRESET_DVD": "DVD Preset",
+    "HB_PRESET_BD": "Blu-ray Preset",
+    "DEST_EXT": "Output File Type",
+    "HANDBRAKE_CLI": "HandBrake Program",
+    "HANDBRAKE_LOCAL": "Local HandBrake Program",
+    "FFMPEG_PRE_FILE_ARGS": "Arguments Before Input",
+    "FFMPEG_POST_FILE_ARGS": "Arguments After Input",
+    "FFMPEG_CLI": "Program",
+    "FFMPEG_LOCAL": "Local Program",
+    "USE_FFMPEG": "Use Instead of HandBrake",
+    "MAINFEATURE": "Main Title Only",
+    "HB_ARGS_DVD": "Extra DVD Arguments",
+    "HB_ARGS_BD": "Extra Blu-ray Arguments",
+    "EMBY_REFRESH": "Refresh Emby Library",
+    "EMBY_SERVER": "Emby Server",
+    "EMBY_PORT": "Emby Port",
+    "EMBY_CLIENT": "Emby Client Name",
+    "EMBY_DEVICE": "Emby Device Name",
+    "EMBY_DEVICEID": "Emby Device ID",
+    "EMBY_USERNAME": "Emby Username",
+    "EMBY_USERID": "Emby User ID",
+    "EMBY_PASSWORD": "Emby Password Hash",
+    "EMBY_API_KEY": "Emby API Key",
+    "NOTIFY_RIP": "Notify When Rip Finishes",
+    "NOTIFY_TRANSCODE": "Notify When Transcode Finishes",
+    "NOTIFY_JOBID": "Include Job ID in Notifications",
+    "PB_KEY": "Pushbullet Key",
+    "IFTTT_KEY": "IFTTT Key",
+    "IFTTT_EVENT": "IFTTT Event Name",
+    "PO_USER_KEY": "Pushover User Key",
+    "PO_APP_KEY": "Pushover App Key",
+    "BASH_SCRIPT": "Notification Script",
+    "OMDB_API_KEY": "OMDb API Key",
+    "TMDB_API_KEY": "TMDb API Key",
+    "JSON_URL": "JSON Webhook URL",
+    "APPRISE": "Apprise Config File",
+    "index_refresh": "Home Refresh Interval (ms)",
+    "database_limit": "History per Page",
+    "notify_refresh": "Notification Display Time (ms)",
 }
 
 GENERAL_SETTING_GROUPS = (
@@ -97,14 +105,14 @@ GENERAL_SETTING_GROUPS = (
         "ARM_NAME", "DISABLE_LOGIN", "DATE_FORMAT", "LOGLEVEL", "LOGLIFE",
         "ARM_CHILDREN",
     )),
-    ("web", "Web server", (
+    ("web", "Web Server", (
         "WEBSERVER_IP", "WEBSERVER_PORT", "UI_BASE_URL",
     )),
-    ("permissions", "File permissions", (
+    ("permissions", "File Permissions", (
         "SET_MEDIA_PERMISSIONS", "CHMOD_VALUE", "SET_MEDIA_OWNER",
         "CHOWN_USER", "CHOWN_GROUP",
     )),
-    ("paths", "Install paths", (
+    ("paths", "Install Paths", (
         "LOGPATH", "DBFILE", "INSTALLPATH", "ABCDE_CONFIG_FILE",
     )),
 )
@@ -112,7 +120,7 @@ GENERAL_SETTING_GROUPS = (
 RIPPER_SETTING_GROUPS = (
     ("general", "General", (
         "GET_VIDEO_TITLE", "VIDEOTYPE", "METADATA_PROVIDER", "OMDB_API_KEY",
-        "TMDB_API_KEY", "MINLENGTH", "MAXLENGTH", "MANUAL_WAIT", "MANUAL_WAIT_TIME",
+        "TMDB_API_KEY", "MINLENGTH", "MAXLENGTH", "MAINFEATURE", "MANUAL_WAIT", "MANUAL_WAIT_TIME",
         "ALLOW_DUPLICATES", "AUTO_EJECT", "SKIP_TRANSCODE", "PREVENT_99",
         "ARM_CHECK_UDF", "RIP_POSTER", "GET_AUDIO_TITLE", "DATA_RIP_PARAMETERS",
         "ARM_API_KEY",
@@ -121,11 +129,13 @@ RIPPER_SETTING_GROUPS = (
         "RAW_PATH", "TRANSCODE_PATH", "COMPLETED_PATH", "EXTRAS_SUB",
     )),
     ("makemkv", "MakeMKV", (
-        "RIPMETHOD", "MAKEMKV_PERMA_KEY", "MKV_ARGS",
-        "MAX_CONCURRENT_MAKEMKVINFO", "DELRAWFILES",
+        "RIPMETHOD", "MAKEMKV_PERMA_KEY",
+        "MKV_LANG", "MKV_VIDEO", "MKV_AUDIO",
+        "MKV_INCLUDE_CORE", "MKV_EXCLUDE_COMMENTARY", "MKV_SUBTITLES",
+        "MKV_ARGS", "MAX_CONCURRENT_MAKEMKVINFO", "DELRAWFILES",
     )),
     ("handbrake", "HandBrake", (
-        "HB_PRESET_DVD", "HB_PRESET_BD", "DEST_EXT", "MAINFEATURE",
+        "HB_PRESET_DVD", "HB_PRESET_BD", "DEST_EXT",
         "HB_ARGS_DVD", "HB_ARGS_BD", "HANDBRAKE_CLI", "HANDBRAKE_LOCAL",
         "MAX_CONCURRENT_TRANSCODES",
     )),
@@ -167,6 +177,31 @@ PORT_SETTING_KEYS = frozenset({"WEBSERVER_PORT", "EMBY_PORT"})
 
 def setting_label(key):
     return SETTING_LABELS.get(key, key.replace("_", " ").title())
+
+
+def strip_comment_hashes(comment):
+    """Remove leading yaml ``#`` prefixes from each comment line."""
+    if not comment or not isinstance(comment, str):
+        return ""
+    lines = []
+    for raw in comment.splitlines():
+        line = raw.lstrip()
+        if line.startswith("#"):
+            line = line[1:]
+            if line.startswith(" "):
+                line = line[1:]
+        lines.append(line.rstrip())
+    return "\n".join(lines).strip()
+
+
+def format_setting_help(key, comment):
+    """Popover body: user-facing comment text, then YAML key for traceability."""
+    body = strip_comment_hashes(comment)
+    if not body:
+        body = "No description is available for this setting."
+    safe_key = html_module.escape(str(key or ""))
+    safe_body = html_module.escape(body)
+    return f"{safe_body}\n\nYAML key: <code>{safe_key}</code>"
 
 
 def grouped_setting_keys(settings, groups=None, leftovers=True, exclude_keys=None):

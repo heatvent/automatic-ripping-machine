@@ -80,7 +80,9 @@ def log_arm_params(job):
                 "FFMPEG_PRE_FILE_ARGS", "FFMPEG_POST_FILE_ARGS", "RAW_PATH", "TRANSCODE_PATH",
                 "COMPLETED_PATH", "EXTRAS_SUB", "EMBY_REFRESH", "EMBY_SERVER",
                 "EMBY_PORT", "NOTIFY_RIP", "NOTIFY_TRANSCODE",
-                "MAX_CONCURRENT_TRANSCODES", "MAX_CONCURRENT_MAKEMKVINFO"):
+                "MAX_CONCURRENT_TRANSCODES", "MAX_CONCURRENT_MAKEMKVINFO",
+                "MKV_LANG", "MKV_VIDEO", "MKV_AUDIO", "MKV_INCLUDE_CORE",
+                "MKV_EXCLUDE_COMMENTARY", "MKV_SUBTITLES"):
         logging.info(f"{key.lower()}: {str(cfg.arm_config.get(key, '<not given>'))}")
     logging.info("******************* End of config parameters *******************")
 
@@ -203,7 +205,12 @@ def setup():
         logging.info(msg)
         time.sleep(1)
     else:  # no break
-        raise utils.RipperException(f"Timed out waiting for drive to be ready (ioctl tray status: {drive.tray}).")
+        # VMware passthrough and audio CDs often never report CDS_DISC_OK.
+        # udev already decided there is a disc; aborting here leaves no job log.
+        logging.warning(
+            f"Drive [{drive.mount}] never reported ready "
+            f"(ioctl tray status: {drive.tray}). Continuing anyway."
+        )
 
     # ARM Job starts
     # Claim the drive before any slow identification so a second udev event cannot pass.
@@ -220,25 +227,33 @@ def setup():
     job.arm_version = arminfo.arm_version
     arminfo.get_values()
 
+    # Config must exist before audio identification writes tracks (they read MINLENGTH).
+    config = Config(cfg.arm_config, job_id=job.job_id)  # noqa: F811
+    logging.debug(f"drive_mode: {drive.drive_mode}")
+    job.manual_mode = drive.drive_mode == 'manual'
+    db.session.commit()
+    utils.database_adder(config)
+    db.session.refresh(job)
+
     # Setup logging (audio CDs may query MusicBrainz here)
     log_file = logger.setup_job_log(job)
 
     logging.info(f"************* Starting ARM processing at {datetime.datetime.now()} *************")
-    # Add the job.config to db
-    config = Config(cfg.arm_config, job_id=job.job_id)  # noqa: F811
-    # Check if the drive mode is set to manual, and load to the job config for later use
-    logging.debug(f"drive_mode: {drive.drive_mode}")
-    if drive.drive_mode == 'manual':
-        job.manual_mode = True
-        db.session.commit()
-    else:
-        job.manual_mode = False
-        db.session.commit()
-    utils.database_adder(config)
 
     try:
         # Delete old log files
-        logger.clean_up_logs(cfg.arm_config["LOGPATH"], cfg.arm_config["LOGLIFE"])
+        keep_logs = {
+            row.logfile
+            for row in Job.query.with_entities(Job.logfile).all()
+            if row.logfile
+        }
+        if job.logfile:
+            keep_logs.add(job.logfile)
+        logger.clean_up_logs(
+            cfg.arm_config["LOGPATH"],
+            cfg.arm_config["LOGLIFE"],
+            keep_names=keep_logs,
+        )
     except Exception as error:
         logging.error(error, exc_info=True)
 

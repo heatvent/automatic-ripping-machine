@@ -62,6 +62,12 @@ def identify(job):
     """Identify disc attributes"""
     logging.debug("Identify Entry point --- job ----")
 
+    # Audio CDs have no ISO/UDF filesystem. Mounting them always fails and used
+    # to log a fake ERROR ("Disc was not and could not be mounted").
+    if job.disctype == "music":
+        logging.info("Audio CD: skipping ISO/UDF mount.")
+        return
+
     mounted = check_mount(job)
 
     # get_disc_type() checks local files, no need to run unless we can mount
@@ -89,8 +95,8 @@ def identify(job):
                          f"year:{job.year} video_type:{job.video_type} "
                          f"disctype: {job.disctype}")
             logging.debug(f"identify.job.end ---- \n\r{job.pretty_table()}")
-    # No need to warn if we cant unmount
-    arm_subprocess(["umount", job.devpath])
+    if mounted:
+        arm_subprocess(["umount", job.devpath])
 
 
 def identify_bluray(job):
@@ -130,13 +136,15 @@ def identify_bluray(job):
     bluray_modified_timestamp = os.path.getmtime(job.mountpoint + '/BDMV/META/DL/bdmt_eng.xml')
     bluray_year = (datetime.datetime.fromtimestamp(bluray_modified_timestamp).strftime('%Y'))
 
-    bluray_title = unicodedata.normalize('NFKD', str(bluray_title)).encode('ascii', 'ignore').decode()
+    bluray_title = str(bluray_title)
+    bluray_title = unicodedata.normalize("NFKC", bluray_title)
 
     bluray_title = bluray_title.replace(' - Blu-rayTM', '')
     bluray_title = bluray_title.replace(' Blu-rayTM', '')
     bluray_title = bluray_title.replace(' - BLU-RAYTM', '')
     bluray_title = bluray_title.replace(' - BLU-RAY', '')
     bluray_title = bluray_title.replace(' - Blu-ray', '')
+    bluray_title = bluray_title.replace('\u2122', '').replace('\u00ae', '')
 
     bluray_title = utils.clean_for_filename(bluray_title)
 
@@ -168,10 +176,11 @@ def identify_dvd(job):
         logging.debug(f"results = {arm_api_json['results']}")
         if arm_api_json['success']:
             logging.info("Found crc64 id from online API")
-            logging.info(f"title is {arm_api_json['results']['0']['title']}")
+            title = utils.clean_for_filename(arm_api_json['results']['0']['title'])
+            logging.info(f"title is {title}")
             args = {
-                'title': arm_api_json['results']['0']['title'],
-                'title_auto': arm_api_json['results']['0']['title'],
+                'title': title,
+                'title_auto': title,
                 'year': arm_api_json['results']['0']['year'],
                 'year_auto': arm_api_json['results']['0']['year'],
                 'imdb_id': arm_api_json['results']['0']['imdb_id'],
@@ -208,7 +217,7 @@ def identify_dvd(job):
         logging.debug("Cant connect to online service!")
     # Failsafe so that we always have a title.
     if job.title is None or job.title == "None":
-        job.title = str(job.label)
+        job.title = utils.clean_for_filename(job.label)
         job.year = None
 
     # Track 99 detection

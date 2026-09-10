@@ -2,7 +2,6 @@
     {% from 'macros/icons.html' import info_icon %}
     {% from 'macros/settings.html' import setting_caption, setting_info %}
     <div class="tab-pane pt-5" id="uiSettingsTab" role="tabpanel" aria-labelledby="uiSettings-tab">
-        <h4>UI Settings</h4>
         <form id="uiSettings" name="uiSettings" action="" novalidate>
             {{ form.hidden_tag() }}
             <input type="hidden" name="notify_refresh" value="{{ ui_settings.notify_refresh }}">
@@ -26,9 +25,9 @@
             </div>
             <div class="invalid-feedback setting-error" data-error-for="database_limit" hidden></div>
             </div>
-            <button id="uiSubmit" class="btn btn-secondary btn-lg btn-block" form="uiSettings"
+            <button id="uiSubmit" class="btn btn-secondary btn-lg btn-block settings-save" form="uiSettings"
                     type="submit">
-                Save UI settings
+                Save UI Settings
             </button>
         </form>
     </div>

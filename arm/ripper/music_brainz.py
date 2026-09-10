@@ -185,7 +185,7 @@ def check_musicbrainz_data(job, disc_info: dict) -> str:
                     title = str(release.get('title', 'no title'))
                     artist = release['artist-credit'][0]['artist']['name']
                     no_of_titles = disc_info['disc']['offset-count']
-                    artist_title = artist + " " + title
+                    artist_title = u.clean_for_filename(f"{artist} {title}")
                     # Set out release id as the CRC_ID
                     args = {
                         'job_id': str(job.job_id),
@@ -220,7 +220,7 @@ def check_musicbrainz_data(job, disc_info: dict) -> str:
         artist = disc_info['cdstub']['artist']
         no_of_titles = disc_info['cdstub']['track-count']
         new_year = ''
-        artist_title = artist + " " + title
+        artist_title = u.clean_for_filename(f"{artist} {title}")
         args = {
             'job_id': str(job.job_id),
             'crc_id': disc_info['cdstub']['id'],
@@ -321,10 +321,11 @@ def get_title(discid: str, job) -> str:
             return "not identified"
 
         clean_title = u.clean_for_filename(artist) + "-" + u.clean_for_filename(title)
+        display_title = u.clean_for_filename(f"{artist} {title}")
         args = {
             'crc_id': crc_id,
-            'title': str(artist + " " + title),
-            'title_auto': str(artist + " " + title),
+            'title': display_title,
+            'title_auto': display_title,
             'video_type': "Music"
         }
         u.database_updater(args, job)

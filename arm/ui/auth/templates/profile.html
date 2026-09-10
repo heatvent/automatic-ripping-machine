@@ -3,17 +3,17 @@
 {% block content %}
     <div class="container profile-page">
         <h1 class="page-heading">Profile</h1>
-        <p class="text-muted">Signed in as <strong>{{ user }}</strong>.</p>
+        <p class="text-muted">Signed in as <strong>{{ user|title }}</strong>.</p>
 
         <div class="card mb-4">
-            <div class="card-header">Change password</div>
+            <div class="card-header">Change Password</div>
             <div class="card-body">
                 <form id="form1" name="form1" method="post" action="profile">
                     {{ form.hidden_tag() }}
                     <input type="hidden" name="username" value="{{ user }}">
                     <div class="input-group mb-3">
                         <div class="input-group-prepend">
-                            <span class="input-group-text" id="basic-addon1">Current password</span>
+                            <span class="input-group-text" id="basic-addon1">Current Password</span>
                         </div>
                         <input type="password" class="form-control" name="old_password" aria-label="current password"
                                aria-describedby="basic-addon1" autocomplete="current-password">
@@ -23,7 +23,7 @@
                     </div>
                     <div class="input-group mb-3">
                         <div class="input-group-prepend">
-                            <span class="input-group-text" id="basic-addon2">New password</span>
+                            <span class="input-group-text" id="basic-addon2">New Password</span>
                         </div>
                         <input type="password" class="form-control" name="new_password" aria-label="new password"
                                aria-describedby="basic-addon2" autocomplete="new-password">
@@ -31,7 +31,7 @@
                             <div class="text-danger">{{ error }}</div>
                         {% endfor %}
                     </div>
-                    <button class="btn btn-primary" form="form1" type="submit">Update password</button>
+                    <button class="btn btn-primary" form="form1" type="submit">Update Password</button>
                 </form>
             </div>
         </div>

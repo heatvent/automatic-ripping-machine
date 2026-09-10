@@ -1,10 +1,13 @@
 ## Contents
-1. [Hardware Requirements](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Hardware-Requirements)
-2. [Installation](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Installation)
-3. [Docker Setup](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Docker-Setup)
-4. [Virtual Machine Setup](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Virtual-Machine-Setup)
-5. [ARM Configuration](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#ARM-Configuration)
-6. [Additional Hardware Setup](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started#Additional-Hardware-Setup)
+
+This tree is the **heatvent-2x** fork. Install from the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) or [Docker.md](Docker.md). The hardware notes below still apply. Links to the upstream wiki describe the original project and its Docker Hub image.
+
+1. [Hardware Requirements](#hardware-requirements)
+2. [Installation](#installation)
+3. [Docker Setup](#docker-setup)
+4. [Virtual Machine Setup](#virtual-machine-setup)
+5. [ARM Configuration](#arm-configuration)
+6. [Additional Hardware Setup](#additional-hardware-setup)
 
 ## Hardware Requirements
 
@@ -45,10 +48,7 @@ ARM can be installed in multiple ways:
 
 ### Docker Setup
 
-ARM has a prebuilt docker image ready to go with minimal steps required to start, this is the best option for new users of ARM as it requires less setup and configuration - [prebuilt image](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/docker).
-
-The alternative is to build the docker image from the ARM dockerfile on your system and
-       - [Build from Dockerfile](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Building-ARM-docker-image-from-source)
+This fork has no Docker Hub image. Build from source: [Docker.md](Docker.md) or [Docker-From-Source.md](Docker-From-Source.md).
 
 ### Virtual Machine Setup
 

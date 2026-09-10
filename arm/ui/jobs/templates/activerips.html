@@ -19,11 +19,12 @@
                             </tr>
                         </thead>
                         <tbody>
+                                        {% from 'macros/icons.html' import status_badge %}
                                         {% for job in jobs %}
                             <tr>
                                 <td class="text-nowrap"><a href="titleupdate" title="Active Rips">{{ job.title }}</a></td>
                                 <td class="text-nowrap">{{ job.start_time }}</td>
-                                <td class="text-nowrap">{{ job.status }}</td>
+                                <td class="text-nowrap">{{ status_badge(job.status) }}</td>
                                         {% endfor %}
                             </tr>
                         </tbody>

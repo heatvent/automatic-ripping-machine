@@ -2,7 +2,6 @@
     {% from 'macros/icons.html' import info_icon %}
     {% from 'macros/settings.html' import setting_caption, setting_info %}
     <div class="tab-pane pt-5" id="abcde" role="tabpanel" aria-labelledby="abcde-tab">
-        <h4>CD Ripper</h4>
         <p class="text-muted">These options update <code>abcde.conf</code> used for audio CDs. Comments and advanced lines in the file are kept.</p>
         <form id="abcdeSettings" name="abcdeSettings" method="post" action="" novalidate>
             {{ form.hidden_tag() }}
@@ -49,9 +48,9 @@
                 <div class="invalid-feedback setting-error" data-error-for="{{ field.key }}" hidden></div>
                 </div>
             {% endfor %}
-            <button id="cdRipperSubmit" class="btn btn-secondary btn-lg btn-block"
+            <button id="cdRipperSubmit" class="btn btn-secondary btn-lg btn-block settings-save"
                     form="abcdeSettings" type="submit"{% if abcde_read_only %} disabled{% endif %}>
-                Save CD ripper settings
+                Save CD Ripper Settings
             </button>
         </form>
     </div>

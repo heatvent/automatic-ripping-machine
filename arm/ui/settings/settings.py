@@ -11,6 +11,8 @@ Covers
 - systemdrivescan [GET]
 - update_arm [POST]
 - drive_eject [GET]
+- drive_open [GET]
+- drive_close [GET]
 - drive_remove [GET]
 - testapprise [GET]
 - updatesysinfo [GET]
@@ -31,9 +33,10 @@ from flask import render_template, request, flash, \
     redirect, Blueprint, session, url_for
 
 import arm.ui.utils as ui_utils
+from arm.config.path_health import media_path_health
 from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import app, db
-from arm.models.job import Job
+from arm.models.job import Job, status_label
 from arm.models.system_drives import SystemDrives
 from arm.models.system_info import SystemInfo
 from arm.models.ui_settings import UISettings
@@ -47,10 +50,12 @@ from arm.config.config_utils import (
     mask_last,
     yaml_is_true,
 )
+from arm.config.makemkv_select import apply_default_selection
 from arm.ui.settings.setting_meta import (
     INTEGER_SETTING_KEYS,
     PORT_SETTING_KEYS,
     SETTING_LABELS,
+    format_setting_help,
     page_setting_groups,
     setting_label,
     validate_ripper_form,
@@ -92,6 +97,9 @@ def _first_form_errors(form):
 route_settings.add_app_template_filter(mask_last, name='mask_last')
 route_settings.add_app_template_filter(yaml_is_true, name='as_bool')
 route_settings.add_app_template_global(setting_label, name='setting_label')
+route_settings.add_app_template_global(format_setting_help, name='format_setting_help')
+route_settings.add_app_template_global(status_label, name='status_label')
+route_settings.add_app_template_filter(status_label, name='status_label')
 
 
 def redacted_config(settings):
@@ -131,7 +139,8 @@ def _system_page_context():
              'no_failed_jobs': failed_rips,
              'total_rips': total_rips,
              'updated': ui_utils.git_check_updates(local_git_hash),
-             'hw_support': check_hw_transcode_support()
+             'hw_support': check_hw_transcode_support(),
+             'machine_ip': ui_utils.format_machine_ip(),
              }
 
     server = SystemInfo.query.filter_by(id="1").first()
@@ -146,6 +155,8 @@ def _system_page_context():
         'serverutil': serverutil,
         'arm_path': cfg.arm_config['TRANSCODE_PATH'],
         'media_path': cfg.arm_config['COMPLETED_PATH'],
+        'raw_path': cfg.arm_config['RAW_PATH'],
+        'path_health': media_path_health(cfg.arm_config),
         'drives': drives,
         'form_drive': SystemInfoDrives(request.form),
     }
@@ -291,6 +302,14 @@ def save_settings():
             # Set the ARM Log level to the config
             app.logger.info(f"Setting log level to: {cfg.arm_config['LOGLEVEL']}")
             app.logger.setLevel(cfg.arm_config['LOGLEVEL'])
+            try:
+                selection = apply_default_selection(cfg.arm_config)
+                app.logger.info(f"Wrote MakeMKV selection rule: {selection}")
+            except OSError as sel_error:
+                app.logger.error(
+                    "Could not write MakeMKV app_DefaultSelectionString",
+                    exc_info=sel_error,
+                )
             restart_needed = any(
                 str(cfg.arm_config.get(key)) != before[key] for key in restart_keys
             )
@@ -468,24 +487,41 @@ def system_drive_scan():
 @route_settings.route('/drive/eject/<eject_id>')
 @login_required
 def drive_eject(eject_id):
-    """
-    Server System - change state of CD/DVD/BluRay drive - toggle eject status
-    """
+    """Toggle tray for the drive icon; Open/Close buttons use explicit routes."""
+    return _drive_tray_action(eject_id, "toggle")
+
+
+@route_settings.route('/drive/open/<drive_id>')
+@login_required
+def drive_open(drive_id):
+    """Open the optical drive tray."""
+    return _drive_tray_action(drive_id, "eject")
+
+
+@route_settings.route('/drive/close/<drive_id>')
+@login_required
+def drive_close(drive_id):
+    """Close the optical drive tray."""
+    return _drive_tray_action(drive_id, "close")
+
+
+def _drive_tray_action(drive_id, method):
     try:
-        drive = SystemDrives.query.filter_by(drive_id=eject_id).one()
-    except sqlalchemy.exc.NoResultFound as e:
-        app.logger.error(f"Drive eject encountered an error: {e}")
-        flash(f"Cannot find drive {eject_id} in database.", "error")
+        drive = SystemDrives.query.filter_by(drive_id=drive_id).one()
+    except sqlalchemy.exc.NoResultFound as err:
+        app.logger.error(f"Drive tray action encountered an error: {err}")
+        flash(f"Cannot find drive {drive_id} in database.", "error")
         return redirect_to_settings_tab()
-    # block for running jobs
-    if drive.job_id_current:
-        drive.tray_status()  # update tray status
-        if not drive.open:  # allow closing
-            flash(f"Job [{drive.job_id_current}] in progress. Cannot eject {eject_id}.", "error")
-            return redirect_to_settings_tab()
-    # toggle open/close (with non-critical error)
-    if (error := drive.eject(method="toggle")) is not None:
+    labels = {"eject": "Opened the tray.", "close": "Closed the tray.", "toggle": "Toggled the tray."}
+    if (error := drive.eject(method=method)) is not None:
         flash(error, "error")
+    else:
+        flash(labels.get(method, "Tray command finished."), "success")
+    try:
+        db.session.commit()
+    except Exception as err:  # noqa: BLE001
+        app.logger.error(f"Unable to save drive state after tray action: {err}")
+        db.session.rollback()
     return redirect_to_settings_tab()
 
 

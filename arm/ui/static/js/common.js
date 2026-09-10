@@ -37,36 +37,49 @@ function getRipperName(job, idsplit) {
 
 function addJobItem(job, authenticated) {
     // Local server or remote
-    const idsplit = job.job_id.split("_");
-    console.log(`${idsplit[1]} - ${idsplit[0]}`)
-    //Start creating the card with job id and header title
-    let x = `<div class="col-md-4" id="jobId${job.job_id}"><div class="card m-3  mx-auto">`;
+    const idsplit = String(job.job_id).split("_");
+    const jobHref = (idsplit[1] === undefined)
+        ? `/jobdetail?job_id=${job.job_id}`
+        : `${job.server_url}/jobdetail?job_id=${idsplit[1]}`;
+    let x = `<div class="col-md-4" id="jobId${job.job_id}"><div class="card m-3 mx-auto">`;
     x += `<div class="card-header row no-gutters justify-content-center"><strong id="jobId${job.job_id}_header">${titleManual(job)}</strong></div>`;
-    // Main holder for the 3 sections of info - includes 1 section (Poster img)
-    // We need to check if idsplit is undefined, database page doesn't have splitid's
-    if (idsplit[1] === undefined) {
-        x += `<div class="row no-gutters"><div class="col-lg-4"><a href="/jobdetail?job_id=${job.job_id}">${posterCheck(job)}</a></div>`;
-    } else {
-        x += `<div class="row no-gutters"><div class="col-lg-4"><a href="${job.server_url}/jobdetail?job_id=${idsplit[1]}">${posterCheck(job)}</a></div>`;
-    }
-    // Section 2 (Middle)  Contains Job info (status, type, device, start time, progress)
+    x += `<div class="job-card-body">`;
+    x += `<div class="job-card-poster"><a href="${jobHref}">${posterCheck(job)}</a></div>`;
     x += buildMiddleSection(job);
     x += buildRightSection(job, idsplit, authenticated);
-    // Close Job.card
-    x += "</div></div></div></div></div></div></div>";
+    x += playlistPickerHtml(job, idsplit);
+    x += jobErrorsHtml(job);
+    x += "</div></div></div>";
     return x;
+}
+
+function escapeHtml(text) {
+    return String(text == null ? "" : text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function jobErrorsHtml(job) {
+    const errors = job && job.errors && job.errors !== "None" ? String(job.errors) : "";
+    const hidden = errors ? "" : " hidden";
+    return `<div class="job-card-warning alert alert-warning mb-0"${hidden} id="jobId${job.job_id}_errors" role="status">${escapeHtml(errors)}</div>`;
 }
 
 function transcodingCheck(job) {
     let x = "";
-    if ((job.status === "transcoding" || job.status === "waiting_transcode") && job.stage !== "" && job.progress || job.disctype === "music" && job.stage !== "") {
+    const rippingBar = job.status === "ripping" && job.stage && job.progress;
+    const transcodeBar = (job.status === "transcoding" || job.status === "waiting_transcode") && job.stage && job.progress;
+    const musicBar = job.disctype === "music" && job.stage;
+    if (rippingBar || transcodeBar || musicBar) {
         x += `<div id="jobId${job.job_id}_stage"><strong>Stage: </strong>${job.stage}</div>`;
         x += `<div id="jobId${job.job_id}_progress" >`;
         x += `<div class="progress">
                 <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
                 aria-valuenow="${job.progress_round}" aria-valuemin="0" aria-valuemax="100"
-                style="width: ${job.progress_round}%; background-color: #cbcbcb;">
-                    <small class="justify-content-center d-flex position-absolute w-100" style="color: black; z-index: 2;">
+                style="width: ${job.progress_round}%;">
+                    <small class="justify-content-center d-flex position-absolute w-100">
                         ${job.progress}%
                     </small>
                 </div>
@@ -124,7 +137,33 @@ function musicCheck(job, idsplit) {
 }
 
 function posterCheck(job) {
-    return `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${jobPosterSrc(job)}" width="160" class="img-thumbnail">`;
+    return `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${jobPosterSrc(job)}" class="img-thumbnail job-card-cover">`;
+}
+
+const STATUS_LABELS = {
+    success: "Success",
+    fail: "Failed",
+    waiting_manual: "Waiting for Title",
+    waiting_playlist: "Pick Playlist",
+    active: "Active",
+    ripping: "Ripping",
+    waiting: "Waiting",
+    info: "Reading Disc",
+    transcoding: "Transcoding",
+    waiting_transcode: "Waiting to Transcode",
+    yes: "Yes",
+    no: "No",
+};
+
+function statusLabel(status) {
+    const raw = String(status == null ? "" : status);
+    const mapped = STATUS_LABELS[raw.toLowerCase()];
+    if (mapped) {
+        return mapped;
+    }
+    return raw.replace(/_/g, " ").replace(/\b\w/g, function (ch) {
+        return ch.toUpperCase();
+    });
 }
 
 function statusClass(status) {
@@ -132,7 +171,9 @@ function statusClass(status) {
 }
 
 function statusBadgeHtml(id, status) {
-    return `<span id="${id}" class="${statusClass(status)}" title="${status}">${status}</span>`;
+    const label = statusLabel(status);
+    const raw = String(status == null ? "" : status);
+    return `<span id="${id}" class="${statusClass(status)}" title="${label}" data-status="${raw}">${label}</span>`;
 }
 
 function titleManual(job) {
@@ -141,10 +182,44 @@ function titleManual(job) {
     return year ? `${title} (${year})` : `${title}`;
 }
 
+function formatBytes(n) {
+    let value = Number(n) || 0;
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i += 1;
+    }
+    const shown = i === 0 ? String(Math.round(value)) : value.toFixed(1);
+    return `${shown} ${units[i]}`;
+}
+
+function playlistPickerHtml(job, idsplit) {
+    if (job.status !== "waiting_playlist") {
+        return "";
+    }
+    const picks = Array.isArray(job.playlist_picks) ? job.playlist_picks : [];
+    const jobId = idsplit[1];
+    let rows = picks.map(function (pick) {
+        const suggested = pick.suggested ? " <span class=\"playlist-suggested\">suggested</span>" : "";
+        return `<button type="button" class="btn btn-sm btn-primary playlist-pick" data-job="${jobId}" data-track="${pick.track_number}">
+            Title ${pick.track_number} · ${pick.length_hms || ""} · ${pick.chapters || 0} ch · ${formatBytes(pick.filesize)}${suggested}
+        </button>`;
+    }).join("");
+    if (!rows) {
+        rows = `<button type="button" class="btn btn-sm btn-primary playlist-pick" data-job="${jobId}" data-track="suggested">Use suggested title</button>`;
+    }
+    return `<div class="playlist-picker" id="jobId${job.job_id}_playlist">
+        <div class="playlist-picker-label">This disc repeats the movie playlist. Pick a title, or ARM will use the suggested one in five minutes.</div>
+        <div class="btn-group-vertical job-actions playlist-picks">${rows}
+            <button type="button" class="btn btn-sm btn-secondary playlist-pick" data-job="${jobId}" data-track="all">Rip all similar titles</button>
+        </div>
+    </div>`;
+}
+
 function buildMiddleSection(job) {
     let x;
-    x = "<div class=\"col-lg-4\"><div class=\"card-body px-1 py-1\">";
-    x += `<div id="jobId${job.job_id}_year"><strong>Year: </strong>${job.year && job.year !== "None" ? job.year : ""}</div>`;
+    x = "<div class=\"job-card-details\"><div class=\"card-body px-1 py-1\">";
     x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${jobTypeLabel(job)}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${job.devpath}</div>`;
     x += `<div><strong>Status: </strong>${statusBadgeHtml("jobId" + job.job_id + "_status", job.status)}</div>`;
@@ -152,39 +227,35 @@ function buildMiddleSection(job) {
     return x;
 }
 
+function onHomeJobList() {
+    return Boolean(document.getElementById("joblist"));
+}
+
 function buildRightSection(job, idsplit, authenticated) {
     let x;
-    // idsplit[1] should only be undefined on the /database page
     if (idsplit[1] === undefined) {
-        console.log("idsplit undefined... fixing");
         idsplit[0] = "0";
-        idsplit[1] = job.job_id
-    } else {
-        console.log(`idsplit ${idsplit[0]} - ${idsplit[1]}`);
+        idsplit[1] = job.job_id;
     }
-    // Section 3 (Right Top) Contains Config.values
-    x = "<div class=\"col-lg-4\"><div class=\"card-body px-1 py-1\">";
-    x += `<div id="jobId${job.job_id}_RIPPER"><strong>Ripper: </strong>${getRipperName(job, idsplit)}</div>`;
-    const cfg = jobConfig(job);
-    x += `<div id="jobId${job.job_id}_RIPMETHOD"><strong>Rip Method: </strong>${cfg.RIPMETHOD || ""}</div>`;
-    x += `<div id="jobId${job.job_id}_MAINFEATURE"><strong>Main Feature: </strong>${cfg.MAINFEATURE || ""}</div>`;
-    x += `<div id="jobId${job.job_id}_MINLENGTH"><strong>Min Length: </strong>${cfg.MINLENGTH || ""}</div>`;
-    x += `<div id="jobId${job.job_id}_MAXLENGTH"><strong>Max Length: </strong>${cfg.MAXLENGTH || ""}</div>`;
-    x += "</div>";
-    // Section 3 (Right Bottom) Contains Buttons for arm json api
-    // Only show when authenticated
+    x = "<div class=\"job-card-side\">";
     x += `<div class="card-body px-2 py-1">`;
-    if (authenticated === true) {
-        x += `<div class="btn-group-vertical job-actions" role="group" aria-label="buttons" ${idsplit[0] !== "0" ? "style=\"display: none;\"" : ""}>
-              <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}" 
+    const onHome = onHomeJobList();
+    const showActions = onHome ? authenticated === true : true;
+    if (showActions) {
+        const hideRemote = onHome && idsplit[0] !== "0" ? "style=\"display: none;\"" : "";
+        x += `<div class="btn-group-vertical job-actions" role="group" aria-label="buttons" ${hideRemote}>`;
+        if (onHome) {
+            x += `<button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}"
               data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>
-              <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-sm btn-primary">View logfile</a>`;
-        x += musicCheck(job, idsplit);
-        x += `<button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="fixperms" 
-              data-jobid="${idsplit[1]}" data-href="json?mode=fixperms&job=${idsplit[1]}">Fix Permissions</button>`;
+              <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-sm btn-primary">View Logfile</a>`;
+        } else {
+            x += `<button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="delete" data-jobid="${idsplit[1]}"
+              data-href="json?job=${idsplit[1]}&mode=delete">Delete Job</button>
+              <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-sm btn-primary">View Logfile</a>`;
+        }
         x += `</div>`;
     }
-    x += `</div>`;
+    x += `</div></div>`;
     return x;
 }
 
@@ -192,25 +263,25 @@ function buildRightSection(job, idsplit, authenticated) {
 function updateModal(modal, modalTitle = "", modalBody = "") {
     switch (actionType) {
         case "abandon":
-            modalTitle = "Abandon This Job ?";
+            modalTitle = "Abandon This Job?";
             modalBody = "This item will be set to abandoned. You cannot set it back to active! Are you sure?";
             break;
         case "delete":
-            modalTitle = "Delete this job forever ?";
+            modalTitle = "Delete This Job Forever?";
             modalBody = "This item will be permanently deleted and cannot be recovered. Are you sure?";
             break;
         case "fixperms":
-            modalTitle = "Try to fix this jobs folder permissions ?";
+            modalTitle = "Fix This Job's Folder Permissions?";
             modalBody = "This will try to set the chmod values from your arm.yaml. It wont always work, you may need to do this manually";
             break;
         case "search":
-            modalTitle = "Search the database";
+            modalTitle = "Search the Database";
             modalBody = `<div class="input-group mb-3"><div class="input-group-prepend"><span class="input-group-text" id="searchlabel">Search </span></div>
                        <input type="text" class="form-control" id="searchquery" aria-label="searchquery" name="searchquery" placeholder="Search...."
                        value="" aria-describedby="searchlabel"><div id="validationServer03Feedback" class="invalid-feedback">Search string too short.</div></div>`;
             break;
         default:
-            modalTitle = "Do you want to leave this page ?";
+            modalTitle = "Do You Want to Leave This Page?";
             modalBody = "To view the log file you need to leave this page. Would you like to leave ?";
     }
     modal.find(".modal-title").text(modalTitle);
@@ -229,10 +300,7 @@ function pingReadNotify(toastId) {
     $.ajax({
         url: "/json?mode=read_notification&notify_id=" + toastId,
         type: "get",
-        timeout: 2000,
-        success: function (data) {
-            console.log(data)
-        }
+        timeout: 2000
     });
 }
 

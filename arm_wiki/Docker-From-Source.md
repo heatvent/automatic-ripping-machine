@@ -28,11 +28,11 @@ usermod -aG cdrom,video arm
 ```
 
 ### Build the image:
-`git clone https://github.com/automatic-ripping-machine/automatic-ripping-machine.git arm`  
+`git clone --recurse-submodules -b heatvent-2x https://github.com/heatvent/automatic-ripping-machine.git arm`
 
 `cd arm`
 
-`docker build -t automatic-ripping-machine .`
+`docker build -t automatic-ripping-machine:heatvent-2x .`
 
 ### Create the container:
 Remember to modify this for YOUR unique configuration!
@@ -41,8 +41,10 @@ docker run -d \
     -p "8080:8080" \
     -e ARM_UID="<id -u arm>" \
     -e ARM_GID="<id -g arm>" \
+    -e TZ="<timedatectl show -p Timezone --value>" \
+    -e ARM_HOST_IP="<host LAN IPv4>" \
     -v "<path_to_arm_user_home_folder>:/home/arm" \
-    -v "<path_to_music_folder>:/home/arm/Music" \
+    -v "<path_to_music_folder>:/home/arm/music" \
     -v "<path_to_logs_folder>:/home/arm/logs" \
     -v "<path_to_media_folder>:/home/arm/media" \
     -v "<path_to_config_folder>:/etc/arm/config" \
@@ -52,9 +54,12 @@ docker run -d \
     --device="/dev/sr3:/dev/sr3" \
     --privileged \
     --restart "always" \
-    --name "automatic-ripping-machine"
+    --name "ARM" \
+    automatic-ripping-machine:heatvent-2x
 ```
-### Finally -  Open localhost:8080/setup, then login to the account
+### Finally - first boot only
+
+Open `http://localhost:8080/setup` **only on a new database** to create the admin user. Visiting `/setup` later can wipe an existing database.
 
 The default username and password:
 username: admin

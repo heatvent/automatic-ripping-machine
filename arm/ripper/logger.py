@@ -11,6 +11,7 @@ import logging.handlers
 import time
 
 import arm.config.config as cfg
+from arm.title_format import clean_for_filename
 
 
 short_format = (
@@ -36,8 +37,9 @@ def setup_job_log(job):
         else:
             valid_label = "no_label"
     else:
-        valid_label = job.label.replace("/", "_")
+        valid_label = job.label
 
+    valid_label = safe_log_basename(valid_label)
     log_file_name = f"{valid_label}.log"
     new_log_file = f"{valid_label}_{job.stage}.log"
     temp_log_full = os.path.join(cfg.arm_config['LOGPATH'], log_file_name)
@@ -46,12 +48,22 @@ def setup_job_log(job):
 
     job.logfile = log_file
 
-    # If a more specific log file is created, the messages are not also logged to
-    # arm.log, but they are still logged to stdout and syslog
+    # Keep arm.log (INFO+) and add the per-job file. Removing arm.log used to
+    # force the docker wrapper to tee stdout back into arm.log, which duplicated
+    # every line while LOGLEVEL was DEBUG.
     logger = logging.getLogger()
-    for handler in logger.handlers:
-        if isinstance(handler, logging.FileHandler):
+    log_path = os.path.abspath(cfg.arm_config["LOGPATH"])
+    arm_log_path = os.path.join(log_path, "arm.log")
+    job_log_path = os.path.abspath(log_full)
+    for handler in list(logger.handlers):
+        if not isinstance(handler, logging.FileHandler):
+            continue
+        existing = os.path.abspath(getattr(handler, "baseFilename", "") or "")
+        if existing not in (arm_log_path, job_log_path):
             logger.removeHandler(handler)
+            handler.close()
+        elif existing == job_log_path:
+            return log_full
 
     logger.addHandler(_create_file_handler(log_file))
 
@@ -64,34 +76,54 @@ def setup_job_log(job):
     return log_full
 
 
-def clean_up_logs(logpath, loglife):
+def clean_up_logs(logpath, loglife, keep_names=None):
     """
-    Delete all log files older than {loglife} days\n
-    if {loglife} is 0 don't delete anything\n
-    :param logpath: path of log files\n
-    :param loglife: days to let logs live\n
-    :return:
+    Delete leftover log files older than {loglife} days.
+
+    arm.log and any log still attached to a job in History are kept, even when
+    older than {loglife}. 0 disables deletion.
+
+    :param logpath: path of log files
+    :param loglife: days to let orphan logs live
+    :param keep_names: basenames that must not be deleted (job.logfile values)
+    :return: True if cleanup ran
     """
     if loglife < 1:
         logging.info("loglife is set to 0. Removal of logs is disabled")
         return False
     now = time.time()
-    logging.info(f"Looking for log files older than {loglife} days old.")
+    logging.info(f"Looking for leftover log files older than {loglife} days old.")
+    keep = {"arm.log"}
+    for name in keep_names or []:
+        if name:
+            keep.add(os.path.basename(str(name)))
 
     logs_folders = [logpath, os.path.join(logpath, 'progress')]
-    # Loop through each log path
     for log_dir in logs_folders:
         logging.info(f"Checking path {log_dir} for old log files...")
-        # Loop through each file in current folder and remove files older than set in arm.yaml
         if not os.path.isdir(log_dir):
             logging.info(f"{log_dir} is not a directory or doesn't exist. Skipping.")
             continue
         for filename in os.listdir(log_dir):
+            if filename in keep:
+                continue
             fullname = os.path.join(log_dir, filename)
-            if fullname.endswith(".log") and os.stat(fullname).st_mtime < now - loglife * 86400:
-                logging.info(f"Deleting log file: {filename}")
+            try:
+                aged_out = (
+                    filename.endswith(".log")
+                    and os.stat(fullname).st_mtime < now - loglife * 86400
+                )
+            except OSError:
+                continue
+            if aged_out:
+                logging.info(f"Deleting leftover log file: {filename}")
                 os.remove(fullname)
     return True
+
+
+def safe_log_basename(label):
+    """Make a log filename that is readable and safe on common filesystems."""
+    return clean_for_filename(label, fallback="music_cd")
 
 
 def _create_file_handler(filename):
@@ -117,11 +149,16 @@ def create_early_logger(stdout=True, syslog=True, file=True):
     # logging.getLogger("urllib3").setLevel(logging.ERROR)
 
     # create logger
-    logger = logging.getLogger("ARM")
+    logger = logging.getLogger()
     logger.setLevel(cfg.arm_config["LOGLEVEL"])
+    # Named "ARM" loggers used by some modules should reach the same handlers.
+    logging.getLogger("ARM").setLevel(cfg.arm_config["LOGLEVEL"])
 
     if file:
-        logger.addHandler(_create_file_handler("arm.log"))
+        # Combined log stays readable while a job log is at DEBUG.
+        arm_handler = _create_file_handler("arm.log")
+        arm_handler.setLevel(logging.INFO)
+        logger.addHandler(arm_handler)
 
     if syslog:
         # create syslog logger handler

@@ -2,50 +2,43 @@
 
 {% block content %}
 <div class="container help-doc">
-    <h1 class="page-heading">Help</h1>
-
-    {% include 'settings/help.html' %}
-
-    <h2>What ARM does</h2>
+    <h2>What ARM Does</h2>
     <p>
         Automatic Ripping Machine watches the optical drive. Insert a disc and it classifies it
         (Blu-ray, DVD, audio CD, or data), rips it, and files the result under your completed path
         so Plex, Jellyfin, or Emby can pick it up.
     </p>
 
-    <h2>Typical workflow</h2>
+    <h2>Typical Workflow</h2>
     <ol>
         <li>Insert a disc. The tray is claimed and a job appears on <a href="index.html">Home</a>.</li>
         <li>On an auto-mode drive, ripping starts immediately. Manual-mode drives wait until you confirm.</li>
         <li>Video discs are identified (title, year, type) using your metadata provider (OMDb or TMDb).</li>
         <li>MakeMKV (or backup mode) rips the disc. If transcoding is enabled, HandBrake or FFmpeg runs after the rip.</li>
         <li>When this install has skip-transcode enabled, the MakeMKV output is the finished file and the tray is freed sooner.</li>
-        <li>The disc ejects. Finished jobs show as success or fail in History and Database.</li>
+        <li>The disc ejects. Finished rips show as success or fail in History.</li>
     </ol>
 
     <h2>Pages</h2>
     <dl>
         <dt>Home</dt>
-        <dd>Active rips. Abandon a stuck job, open its log, or fix the title from here.</dd>
-        <dt>Database</dt>
-        <dd>Every job as a card. Search, filter successful or failed jobs, abandon, or delete.</dd>
+        <dd>Active rips. Abandon a stuck job, open its log, or pick a playlist title when a Blu-ray repeats the movie. Home also shows whether Raw / Transcode / Completed folders are writable.</dd>
         <dt>History</dt>
-        <dd>Past rips with status and log links (full, ARM-only, live tail, or download). System logs that are not tied to a rip are listed at the bottom of the first page.</dd>
+        <dd>Past rips in a table. Search, filter successful or failed rips, delete, or open a log. System logs that are not tied to a rip are listed at the bottom of the first page.</dd>
         <dt>Settings</dt>
         <dd>General (machine name, web server, permissions), System Information (software versions and live hardware stats), Disk Drives, Movie Ripper, CD Ripper for audio discs, Notifications (including Emby and Apprise), and UI refresh interval.</dd>
         <dt>Profile</dt>
         <dd>Click your username in the sidebar footer to change the password or log out.</dd>
     </dl>
 
-    <h2>Drives and jobs</h2>
+    <h2>Drives</h2>
     <p>
         Each drive can be auto or manual. Auto starts as soon as a disc is ready. Manual waits for input
         in the UI. A drive that is only transcoding (rip already finished) does not keep the tray locked,
         so you can insert the next disc.
     </p>
     <p>
-        If a title is wrong, use Title Search or Custom Title on the job card. Edit Settings on a job
-        changes min/max length, rip method, and main-feature for that job only.
+        If a title is wrong, use Title Search or Custom Title on the job details page. Those change the saved name and output folder; they do not restart MakeMKV if ripping has already started. Edit Settings on a job changes min/max length, rip method, and main-feature for that job only.
     </p>
 
     <h2>Notifications</h2>
@@ -54,14 +47,14 @@
         (Discord, email, ntfy, and others) from the Notifications tab in Settings.
     </p>
 
-    <h2>When the UI asks to reload</h2>
+    <h2>When the UI Asks to Reload</h2>
     <p>
         Most settings apply as soon as you save. A banner appears only if the web process itself must
         restart — for example after changing login or the listen address. In-progress rips are not stopped.
         Saving UI Settings (refresh interval) only needs a page reload on Home.
     </p>
 
-    <h2>Send titles to the ARM DVD database</h2>
+    <h2>Send Titles to the ARM DVD Database</h2>
     <p>
         Upstream ARM can upload DVD identifiers (CRC64, title, year, IMDb id, disc label) to a shared
         community database so other people can identify discs without OMDb. Nothing personal is sent.
@@ -69,8 +62,11 @@
         The page still exists at <a href="send_movies">/send_movies</a> if you want to contribute;
         you need an ARM API key in <code>arm.yaml</code>.
     </p>
+
+    {% include 'settings/help.html' %}
 </div>
 <script>
     activeTab("help");
 </script>
 {% endblock %}
+{% block footer %}{% endblock %}

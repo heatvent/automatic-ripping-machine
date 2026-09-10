@@ -39,7 +39,7 @@ class Config(db.Model):
     CHOWN_USER = db.Column(db.String(50))
     CHOWN_GROUP = db.Column(db.String(50))
     RIPMETHOD = db.Column(db.String(25))
-    MKV_ARGS = db.Column(db.String(25))
+    MKV_ARGS = db.Column(db.String(512))
     DELRAWFILES = db.Column(db.Boolean)
     HASHEDKEYS = db.Column(db.Boolean)
     HB_PRESET_DVD = db.Column(db.String(256))

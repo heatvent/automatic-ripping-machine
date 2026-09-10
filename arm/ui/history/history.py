@@ -1,71 +1,19 @@
 """
 ARM route blueprint for history pages
 Covers
-- history [GET]
+- history [GET] (redirects to /jobs)
 """
 
-import os
-from flask_login import LoginManager, login_required  # noqa: F401
-from flask import render_template, request, Blueprint, session
-
-import arm.ui.utils as ui_utils
-from arm.ui import app, db
-from arm.models.job import Job
-import arm.config.config as cfg
+from flask_login import login_required  # noqa: F401
+from flask import request, Blueprint, redirect, url_for
 
 route_history = Blueprint('route_history', __name__,
                           template_folder='templates',
                           static_folder='../static')
 
-# This attaches the armui_cfg globally to let the users use any bootswatch skin from cdn
-armui_cfg = ui_utils.arm_db_cfg()
-
 
 @route_history.route('/history')
 @login_required
 def history():
-    """
-    Smaller much simpler output of previously run jobs
-
-    """
-    # regenerate the armui_cfg we don't want old settings
-    armui_cfg = ui_utils.arm_db_cfg()
-    page = request.args.get('page', 1, type=int)
-    if os.path.isfile(cfg.arm_config['DBFILE']):
-        # after roughly 175 entries firefox readermode will break
-        # jobs = Job.query.filter_by().limit(175).all()
-        jobs = Job.query.order_by(db.desc(Job.job_id)).paginate(page=page,
-                                                                max_per_page=int(
-                                                                    armui_cfg.database_limit),
-                                                                error_out=False)
-    else:
-        app.logger.error('ERROR: /history database file doesnt exist')
-        jobs = {}
-    app.logger.debug(f"Date format - {cfg.arm_config['DATE_FORMAT']}")
-
-    session["page_title"] = "History"
-
-    other_logs = []
-    log_path = cfg.arm_config.get("LOGPATH")
-    if (
-        not isinstance(jobs, dict)
-        and getattr(jobs, "page", 1) == 1
-        and log_path
-        and os.path.isdir(log_path)
-    ):
-        try:
-            job_logs = {
-                name for (name,) in db.session.query(Job.logfile).filter(Job.logfile.isnot(None)).all()
-                if name
-            }
-            other_logs = [
-                entry for entry in ui_utils.get_info(log_path)
-                if entry[0] not in job_logs
-            ]
-            other_logs.sort(key=lambda item: item[0].lower())
-        except (OSError, Exception) as error:  # noqa: BLE001
-            app.logger.error(f"Unable to list log files: {error}")
-
-    return render_template('history.html', jobs=jobs.items,
-                           date_format=cfg.arm_config['DATE_FORMAT'], pages=jobs,
-                           other_logs=other_logs)
+    """Kept as a bookmark; jobs now live on /jobs."""
+    return redirect(url_for('route_jobs.view_jobs', page=request.args.get('page')))

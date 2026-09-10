@@ -11,8 +11,7 @@
 {% macro primary_nav(with_id=True) %}
     {{ nav_anchor('home', 'index.html', 'Home', with_id=with_id) }}
     {% if current_user.is_authenticated or config.LOGIN_DISABLED %}
-        {{ nav_anchor('database', 'database', 'Database', 'DB', with_id=with_id) }}
-        {{ nav_anchor('history', 'history', 'History', with_id=with_id) }}
+        {{ nav_anchor('jobs', 'jobs', 'History', with_id=with_id) }}
         {{ nav_anchor('armsettings', 'settings', 'Settings', with_id=with_id) }}
         {{ nav_anchor('help', 'help', 'Help', with_id=with_id) }}
     {% else %}

@@ -27,19 +27,19 @@
             }
 
             td:nth-of-type(3):before {
-                content: "Log link Tail:";
+                content: "Log Link Tail:";
             }
 
             td:nth-of-type(4):before {
-                content: "Log link ARM:";
+                content: "Log Link ARM:";
             }
 
             td:nth-of-type(5):before {
-                content: "Log link Full:";
+                content: "Log Link Full:";
             }
 
             td:nth-of-type(6):before {
-                content: "Log link Download:";
+                content: "Log Link Download:";
             }
         }
     </style>
@@ -47,17 +47,16 @@
     <div class="row">
         <div class="col-12">
             <div class="table-responsive">
-                <h1 class="page-heading">Logs</h1>
                 <div class="jumbotron">
                     <div class="row">
                         <table class="table table-striped table-hover">
                             <caption>Log files in the log directory</caption>
                             <thead class="thead-dark">
                             <tr>
-                                <th scope="col" style="cursor: pointer;">Log file</th>
+                                <th scope="col" style="cursor: pointer;">Log File</th>
                                 <th scope="col" style="cursor: pointer;">Created Time</th>
-                                <th scope="col" style="cursor: pointer;">Size(kb)</th>
-                                <th scope="col" colspan="4" style="cursor: default;" class="text-center" data-sorter="false">View modes</th>
+                                <th scope="col" style="cursor: pointer;">Size (KB)</th>
+                                <th scope="col" colspan="4" style="cursor: default;" class="text-center" data-sorter="false">View Modes</th>
                             </tr>
                             </thead>
                             <tbody>
@@ -66,10 +65,10 @@
                                     <th scope="row" class="text-wrap">{{ file[0]|truncate(30, True) }}</th>
                                     <td class="text-wrap">{{ file[1] }}</td>
                                     <td>{{ file[3] }}</td>
-                                    <td><a href="logs?logfile={{ file[0] }}&mode=tail">tail</a></td>
-                                    <td><a href="logs?logfile={{ file[0] }}&mode=armcat">arm</a></td>
-                                    <td><a href="logs?logfile={{ file[0] }}&mode=full">full</a></td>
-                                    <td><a href="logreader?logfile={{ file[0] }}&mode=download">download</a></td>
+                                    <td class="log-actions"><a href="logs?logfile={{ file[0] }}&mode=tail">Tail</a></td>
+                                    <td class="log-actions"><a href="logs?logfile={{ file[0] }}&mode=armcat">ARM</a></td>
+                                    <td class="log-actions"><a href="logs?logfile={{ file[0] }}&mode=full">Full</a></td>
+                                    <td class="log-actions"><a href="logreader?logfile={{ file[0] }}&mode=download">Download</a></td>
                                 </tr>
                             {% endfor %}
                             </tbody>
@@ -87,11 +86,11 @@
             </div>
             <div class="d-flex justify-content-center">
                 <p class="p-4" style="line-height: 20pt;">
-                    <strong>tail:</strong> Output to browser in real time. Similar to 'tail -f'<br/>
-                    <strong>arm:</strong> Static output of just the ARM log entries<br/>
-                    <strong>full:</strong> Static output of all of the log including MakeMKV and
+                    <strong>Tail:</strong> Output to the browser in real time, similar to tail -f<br/>
+                    <strong>ARM:</strong> Static output of just the ARM log entries<br/>
+                    <strong>Full:</strong> Static output of the whole log, including MakeMKV and
                     HandBrake<br/>
-                    <strong>download:</strong> Download the full log file<br/>
+                    <strong>Download:</strong> Download the full log file<br/>
                 </p>
             </div>
         </div>

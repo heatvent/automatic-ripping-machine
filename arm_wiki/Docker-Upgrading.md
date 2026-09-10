@@ -25,14 +25,15 @@ docker ps
 2. Stop the running ARM container
 
 ```bash
-docker stop automatic-ripping-machine
+docker stop ARM
 ```
 
-3. Pull the new version of ARM from Docker. 
-This container is updated nightly following any new code changes made to ARM via GitHub.
+3. Rebuild the heatvent-2x image from this repository (there is no Docker Hub image for this fork).
 
 ```bash
-docker pull automaticrippingmachine/automatic-ripping-machine
+cd /path/to/automatic-ripping-machine
+git pull
+docker build -t automatic-ripping-machine:heatvent-2x .
 ```
 
 4. Docker prune, this removes any unused containers from taking up space.

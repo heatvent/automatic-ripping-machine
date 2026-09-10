@@ -40,7 +40,7 @@ def logs():
 @login_required
 def listlogs(path):
     """Logs now live on History; keep this URL as a redirect."""
-    return redirect(url_for("route_history.history") + "#other-logs")
+    return redirect(url_for("route_jobs.view_jobs") + "#other-logs")
 
 
 @route_logs.route('/logreader')

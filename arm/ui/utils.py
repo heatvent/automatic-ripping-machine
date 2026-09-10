@@ -2,10 +2,12 @@
 Main catch all page for functions for the A.R.M ui
 """
 import hashlib
+import ipaddress
 import os
 import shutil
 import json
 import platform
+import socket
 import subprocess
 import re
 from datetime import datetime
@@ -30,6 +32,7 @@ from arm.models.user import User
 from arm.ui import app, db
 from arm.ui.metadata import tmdb_search, get_tmdb_poster, tmdb_find, call_omdb_api
 from arm.ui.settings import DriveUtils
+from arm.title_format import clean_for_filename
 
 # Path definitions
 path_migrations = "arm/migrations"
@@ -322,19 +325,6 @@ def get_info(directory):
             # [file,most_recent_access,created, file_size]
             file_list.append([i, access_time, create_time, file_size])
     return file_list
-
-
-def clean_for_filename(string):
-    """ Cleans up string for use in filename """
-    string = re.sub(r'\s+', ' ', string)
-    string = string.replace(' : ', ' - ')
-    string = string.replace(':', '-')
-    string = string.replace('&', 'and')
-    string = string.replace("\\", " - ")
-    # Strip out any remaining illegal chars
-    string = re.sub(r"[^\w -]", "", string)
-    string = string.strip()
-    return string
 
 
 def getsize(path):
@@ -898,6 +888,137 @@ def get_git_revision_short_hash() -> str:
         app.logger.debug(f"GIT revision error: {e}")
 
     return git_hash
+
+
+def usable_ipv4(address):
+    """True for a unicast IPv4 address that can identify this machine on a LAN."""
+    try:
+        addr = ipaddress.ip_address(str(address).strip())
+    except (ValueError, TypeError):
+        return False
+    if addr.version != 4:
+        return False
+    if addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_unspecified:
+        return False
+    if addr.is_reserved:
+        return False
+    # Docker default/compose bridges — not the host LAN address.
+    docker_nets = (
+        ipaddress.ip_network("172.17.0.0/16"),
+        ipaddress.ip_network("172.18.0.0/16"),
+        ipaddress.ip_network("172.19.0.0/16"),
+        ipaddress.ip_network("172.20.0.0/14"),
+    )
+    for net in docker_nets:
+        if addr in net:
+            return False
+    return True
+
+
+def collect_unique_ipv4(candidates):
+    """Return usable IPv4 addresses in first-seen order."""
+    seen = []
+    for raw in candidates:
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if not text:
+            continue
+        if usable_ipv4(text) and text not in seen:
+            seen.append(text)
+    return seen
+
+
+def _ipv4_from_url_or_host(value):
+    """Extract a host/IP from a URL, host:port, or bare address."""
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text or text in {"x.x.x.x", "0.0.0.0", "127.0.0.1", "::"}:
+        return None
+    if "://" not in text:
+        text = "http://" + text
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(text)
+        host = parsed.hostname
+    except (ValueError, AttributeError):
+        return None
+    return host
+
+
+def _interface_ipv4_addresses():
+    addresses = []
+    try:
+        from netifaces import AF_INET, ifaddresses, interfaces
+        for name in interfaces():
+            for link in ifaddresses(name).get(AF_INET, []):
+                addresses.append(link.get("addr"))
+    except Exception:
+        pass
+    if addresses:
+        return addresses
+    try:
+        import psutil
+        for addrs in psutil.net_if_addrs().values():
+            for item in addrs:
+                family = getattr(item, "family", None)
+                if family == socket.AF_INET:
+                    addresses.append(item.address)
+    except Exception:
+        pass
+    return addresses
+
+
+def _udp_source_ipv4():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(("1.1.1.1", 80))
+            return sock.getsockname()[0]
+        finally:
+            sock.close()
+    except OSError:
+        return None
+
+
+def _configured_machine_ipv4():
+    found = []
+    for key in ("ARM_HOST_IP", "HOST_IP"):
+        value = os.environ.get(key)
+        if value:
+            found.append(value.split()[0])
+    try:
+        found.append(_ipv4_from_url_or_host(cfg.arm_config.get("UI_BASE_URL")))
+        found.append(cfg.arm_config.get("WEBSERVER_IP"))
+    except Exception:
+        pass
+    for path in ("/etc/arm/config/host_ip", "/home/arm/config/host_ip"):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                line = handle.readline()
+            if line:
+                found.append(line.split()[0])
+        except OSError:
+            continue
+    return found
+
+
+def get_machine_ipv4_addresses():
+    """LAN IPv4 addresses for the machine ARM is installed on."""
+    return collect_unique_ipv4(
+        list(_configured_machine_ipv4())
+        + _interface_ipv4_addresses()
+        + [_udp_source_ipv4()]
+    )
+
+
+def format_machine_ip(addresses=None):
+    """Comma-separated LAN IPs, or a short fallback when none are found."""
+    ips = addresses if addresses is not None else get_machine_ipv4_addresses()
+    if ips:
+        return ", ".join(ips)
+    return "Not detected"
 
 
 def git_check_updates(current_hash) -> bool:

@@ -1,8 +1,8 @@
-## Installing ARM using Docker on Linux
+## Installing this fork using Docker on Linux
 
 ### **This is not compatible with the snap version of docker!**
 
-A pre-built image has been added to docker hub [HERE](https://hub.docker.com/r/automaticrippingmachine/automatic-ripping-machine).
+This heatvent-2x fork is **not** the Docker Hub image `automaticrippingmachine/automatic-ripping-machine`. Build from [this repository](https://github.com/heatvent/automatic-ripping-machine). See the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) for the short path.
 
 ## Installing Linux
 - Select the option to install all third-party drivers
@@ -14,24 +14,25 @@ If running in a VM, make sure all disks are available to your distro via hardwar
 **This script only supports Linux distros using the `apt` package manager.**
 
 ```
-sudo apt install wget lsscsi
+sudo apt install wget git lsscsi
 lsscsi -g
-wget https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/scripts/installers/docker-setup.sh
+wget https://raw.githubusercontent.com/heatvent/automatic-ripping-machine/heatvent-2x/scripts/installers/docker-setup.sh
 sudo chmod +x docker-setup.sh
 ```
 
 ## Setup ARM Docker
-The script defaults to installing the `latest` tagged image from the `automaticrippingmachine` ARM from *DockerHub*.
-- To specify a tag, add `-t <tag>`
-- To specify a fork, add `-f <fork>`
+The script builds `automatic-ripping-machine:heatvent-2x` from the `heatvent-2x` branch.
 
-To install default: `sudo ./docker-setup.sh`  
-To install from a different repo, tag: `sudo ./docker-setup.sh -f automaticrippingmachine -t dev_build`
+- `-b <branch>` Git branch (default `heatvent-2x`)
+- `-r <owner/repo>` GitHub repo (default `heatvent/automatic-ripping-machine`)
+- `-t <image>` Local image name (default `automatic-ripping-machine:heatvent-2x`)
+
+To install default: `sudo ./docker-setup.sh`
 
 The script will now:
 1. Create an `arm` user and group if they don't exist on the host
 2. Install docker if it is not already found on the system
-3. Pull the appropriate image from Dockerhub
+3. Build the image from this fork (clone if you are not already in the repo)
 4. Create host mountpoints for any DVD drives found on the system
 5. Save a copy of the template run command for the user to fill in to `~arm/start_arm_container.sh`
 
@@ -49,7 +50,11 @@ The script will now:
 
     3. To set the timezone, enter an acceptable value for `TZ`. If none is set, the default timezone is UTC.
 
-       Example: -e `TZ=New_York`
+       Example: -e `TZ=America/New_York`
+
+    4. Set `ARM_HOST_IP` to this machine's LAN IPv4 so the UI and notifications show the right address.
+
+       Example: `-e ARM_HOST_IP="192.168.1.50"`
 
     4. Fill in the appropriate paths for the volumes being mounted. Only change the path on the left hand side, docker volumes are configured with "[local path]:[arm path]". More information about volumes is found below under the heading: [Understanding Docker Volumes for A.R.M.](#understanding-docker-volumes-for-arm)
 
@@ -63,7 +68,7 @@ The script will now:
 
    7. Set the name of the docker image, the default is below, but can be user configured.
       
-      Example: `--name "arm-rippers"`
+      Example: `--name "ARM"`
    
    8. Save and close
 
@@ -71,7 +76,7 @@ The script will now:
 4. **Permissions**: When starting the ARM docker container, if the ARM user ID and group ID from steps 1 and 2 are not set correctly ARM will not start. If the container does not start, check the docker logs.
    
    ```bash
-   docker logs automatic-ripping-machine
+   docker logs ARM
    ```
 
     - If ARM has ownership, you'll see:
@@ -108,7 +113,7 @@ The script will now:
 
 5. **Start ARM**: Run the container with `sudo ./start_arm_container.sh`
 
-You will then need to visit http://WEBSERVER_IP:PORT
+You will then need to visit http://WEBSERVER_IP:PORT/setup **only if this is a new database**. `/setup` on an existing database can wipe it.
 An admin account is required to view rips and settings. A default one has been created for you.
 
 **Username**: admin
@@ -117,7 +122,7 @@ An admin account is required to view rips and settings. A default one has been c
 
 
 ## Updating docker image
-Refer to [Docker Upgrading](Docker-Upgrading)
+Refer to [Docker Upgrading](Docker-Upgrading.md)
 
 ## Understanding Docker Volumes for A.R.M.
 

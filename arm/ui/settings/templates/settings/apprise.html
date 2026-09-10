@@ -1,6 +1,6 @@
 {% from 'macros/settings.html' import setting_caption %}
 <section class="settings-section" id="apprise-config">
-    <h5>Apprise config</h5>
+    <h5>Apprise Config</h5>
     <p>Send messages from ARM to multiple services at once using Apprise. Fill in the service you use, then point ARM at this file. In Docker the default path is <code>/etc/arm/config/apprise.yaml</code>.</p>
     <a class="btn btn-primary mb-3" href="testapprise">Send Test Notification</a>
     <form id="appriseCfg" name="appriseCfg" method="post" action="">
@@ -19,9 +19,9 @@
         </div>
         </div>
         {% endfor %}
-        <button id="apprise_cfg" class="btn btn-secondary btn-lg btn-block" form="appriseCfg"
+        <button id="apprise_cfg" class="btn btn-secondary btn-lg btn-block settings-save" form="appriseCfg"
                 type="submit"{% if apprise_read_only %} disabled{% endif %}>
-            Save Apprise settings
+            Save Apprise Settings
         </button>
     </form>
 </section>

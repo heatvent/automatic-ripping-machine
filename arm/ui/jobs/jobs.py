@@ -14,8 +14,9 @@ Covers
 """
 
 import json
+import os
 from flask_login import LoginManager, login_required, current_user  # noqa: F401
-from flask import render_template, request, Blueprint, flash, redirect, url_for
+from flask import render_template, request, Blueprint, flash, redirect, url_for, session
 from werkzeug.routing import ValidationError
 
 import arm.ui.utils as ui_utils
@@ -28,6 +29,57 @@ from arm.ui.forms import TitleSearchForm, ChangeParamsForm, TrackFormDynamic
 route_jobs = Blueprint('route_jobs', __name__,
                        template_folder='templates',
                        static_folder='../static')
+
+
+def _other_log_files(jobs):
+    """System logs that are not attached to a rip in the current result set."""
+    other_logs = []
+    log_path = cfg.arm_config.get("LOGPATH")
+    if (
+        not isinstance(jobs, dict)
+        and getattr(jobs, "page", 1) == 1
+        and log_path
+        and os.path.isdir(log_path)
+    ):
+        try:
+            job_logs = {
+                name for (name,) in db.session.query(Job.logfile).filter(Job.logfile.isnot(None)).all()
+                if name
+            }
+            other_logs = [
+                entry for entry in ui_utils.get_info(log_path)
+                if entry[0] not in job_logs
+            ]
+            other_logs.sort(key=lambda item: item[0].lower())
+        except (OSError, Exception) as error:  # noqa: BLE001
+            app.logger.error(f"Unable to list log files: {error}")
+    return other_logs
+
+
+@route_jobs.route('/jobs')
+@login_required
+def view_jobs():
+    """Merged job list: History table plus Database search/delete."""
+    armui_cfg = ui_utils.arm_db_cfg()
+    page = request.args.get('page', 1, type=int)
+    if os.path.isfile(cfg.arm_config['DBFILE']):
+        jobs = Job.query.order_by(db.desc(Job.job_id)).paginate(
+            page=page,
+            max_per_page=int(armui_cfg.database_limit),
+            error_out=False,
+        )
+    else:
+        app.logger.error('ERROR: /jobs database file doesnt exist')
+        jobs = {}
+    session["page_title"] = "History"
+    job_items = jobs.items if not isinstance(jobs, dict) else []
+    return render_template(
+        'jobs.html',
+        jobs=job_items,
+        pages=jobs,
+        date_format=cfg.arm_config['DATE_FORMAT'],
+        other_logs=_other_log_files(jobs),
+    )
 
 
 @route_jobs.route('/jobdetail')
@@ -48,8 +100,12 @@ def jobdetail():
     if (job := Job.query.get(job_id)) is None:
         raise ValueError('Job not found')
 
-    # Check if a manual job, waiting for input and user has not provided input
-    if job.manual_mode and job.status == JobState.MANUAL_WAIT_STARTED.value and not job.manual_start:
+    waiting = {
+        JobState.MANUAL_WAIT_STARTED.value,
+        JobState.VIDEO_WAITING.value,
+        JobState.PLAYLIST_WAIT.value,
+    }
+    if job.status in waiting and not job.manual_start:
         manual_edit = True
 
     # Get Job and Track data
@@ -144,9 +200,10 @@ def customtitle():
     job = Job.query.get(job_id)
     form = TitleSearchForm(obj=job)
     if request.args.get("title"):
+        cleaned_title = ui_utils.clean_for_filename(request.args.get("title"))
         args = {
-            'title': request.args.get("title"),
-            'title_manual': request.args.get("title"),
+            'title': cleaned_title,
+            'title_manual': cleaned_title,
             'year': request.args.get("year")
         }
         notification = Notifications(f"Job: {job.job_id} was updated",
@@ -315,6 +372,7 @@ def feed_json():
             'mode': mode,
             'config_id': request.values.get('config_id'),
             'notify_id': request.values.get('notify_id'),
+            'track': request.values.get('track'),
             'notify_timeout': {'funct': json_api.get_notify_timeout, 'args': ('notify_timeout',)},
         }
         # Valid modes that should trigger functions
@@ -338,6 +396,7 @@ def feed_json():
             'read_notification': {'funct': json_api.read_notification, 'args': ('notify_id',)},
             'notify_timeout': {'funct': json_api.get_notify_timeout, 'args': ('notify_timeout',)},
             'restart': {'funct': json_api.restart_ui, 'args': ()},
+            'select_playlist': {'funct': json_api.select_playlist, 'args': ('j_id', 'track')},
         }
     else:
         valid_data = {}

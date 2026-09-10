@@ -1,84 +1,151 @@
-# Automatic Ripping Machine (ARM)
-[![CI](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/main.yml/badge.svg)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/main.yml) [![Publish Docker Image](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/publish-image.yml/badge.svg)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/actions/workflows/publish-image.yml)
-[![Docker](https://img.shields.io/docker/pulls/automaticrippingmachine/automatic-ripping-machine.svg)](https://hub.docker.com/r/automaticrippingmachine/automatic-ripping-machine)
+# Automatic Ripping Machine (heatvent-2x)
 
-[![GitHub forks](https://img.shields.io/github/forks/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/network)
-[![GitHub stars](https://img.shields.io/github/stars/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/stargazers)
-[![GitHub issues](https://img.shields.io/github/issues/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/pulls)
-[![GitHub contributors](https://img.shields.io/github/contributors/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/graphs/contributors)
-[![GitHub last commit](https://img.shields.io/github/last-commit/automatic-ripping-machine/automatic-ripping-machine?)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/commits/main)
+This is a maintained fork of the [Automatic Ripping Machine](https://github.com/automatic-ripping-machine/automatic-ripping-machine). Insert a Blu-ray, DVD, or CD and ARM identifies it, rips it, and (optionally) transcodes it.
 
-[![GitHub license](https://img.shields.io/github/license/automatic-ripping-machine/automatic-ripping-machine)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/blob/main/LICENSE)
+Upstream project and origin story: [b3n.org/automatic-ripping-machine](https://b3n.org/automatic-ripping-machine).
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/automatic-ripping-machine/automatic-ripping-machine?label=Latest%20Stable%20Version)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/releases)
-[![GitHub release Date](https://img.shields.io/github/release-date/automatic-ripping-machine/automatic-ripping-machine?label=Latest%20Stable%20Released)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/releases)
-![Python Versions](https://img.shields.io/badge/Python_Versions-3.9_|_3.10_|_3.11_|_3.12-blue?logo=python)
+**Branch:** `heatvent-2x`  
+**Version:** 2.24.4 (this fork versions independently of upstream)
 
+This is not the Docker Hub `automaticrippingmachine/automatic-ripping-machine` image. Build from this repository.
 
+## Significant changes vs upstream
 
-[![Wiki](https://img.shields.io/badge/Wiki-Get%20Help-brightgreen)](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki)
-[![Discord](https://img.shields.io/discord/576479573886107699)](https://discord.gg/FUSrn8jUcR)
+### User interface
+- Dark gold theme, phone bottom nav, and grouped **Settings** (General, System Information, Disk Drives, Movie Ripper, CD Ripper, Notifications).
+- Settings use plain-language labels, Yes/No and dropdowns, and help popovers that include the YAML key.
+- API keys and passwords are masked in the UI. Login is required unless you turn it off.
+- Job cards and Jobs no longer treat the text `None` as a real title or poster.
 
+### Movie ripping (MakeMKV)
+- **Main Title Only** (with Rip Method = MKV Titles) rips one guessed title instead of backing up the whole disc. Pick order: most chapters, then largest, then longest.
+- Language / video / audio / subtitle dropdowns write MakeMKV’s default selection rule (`app_DefaultSelectionString`). Extra Arguments is only for real `makemkvcon` flags.
+- Blu-rays that repeat the movie playlist many times get a **Possible playlist obfuscation** warning (notification + job). ARM cannot tell the real playlist from duration alone.
+- MakeMKV license refresh can fail on a network error without aborting the job if a key is already on disk.
 
+### CD ripping
+- CD-R / CD-RW discs are treated as audio CDs when udev does not report an audio-track count.
+- Audio CDs skip the ISO/UDF mount path. abcde is started non-interactively; album art is copied next to the FLACs.
+- Empty-tray udev events do not start a rip.
 
-## Overview
+### Reliability and files
+- SQLite with WAL is the supported database. Do not switch this install to MySQL.
+- Safer job/ffmpeg/eject paths, SQLite lock retries, and less duplicated `arm.log` noise.
+- Filenames keep spaces, apostrophes, and commas; `:` becomes ` - `.
+- The UI does not compare git hashes against upstream (upstream is still on a different 2.x line).
 
-Insert an optical disc (Blu-ray, DVD, CD) and checks to see if it's audio, video (Movie or TV), or data, then rips it.
+## Features (inherited)
 
-See: https://b3n.org/automatic-ripping-machine
-
-
-## Features
-
-- Detects insertion of disc using udev
-- Determines disc type...
-  - If video (Blu-ray or DVD)
-    - Retrieve title from disc or [OMDb API](http://www.omdbapi.com/) to name the folder "Movie Title (Year)" so that Plex or Emby can pick it up
-    - Determine if video is Movie or TV using [OMDb API](http://www.omdbapi.com/)
-    - Rip using MakeMKV or HandBrake (can rip all features or main feature)
-    - Eject disc and queue up Handbrake transcoding when done
-    - Transcoding jobs are asynchronously batched from ripping
-    - Send notifications via IFTTT, Pushbullet, Slack, Discord, and many more!
-  - If audio (CD) - rip using abcde (get disc-data and album art from [musicbrainz](https://musicbrainz.org/))
-  - If data (Blu-ray, DVD, DVD-Audio or CD) - make an ISO backup
-- Headless, designed to be run from a server
-- Can rip from multiple-optical drives in parallel
-- Python Flask UI to interact with ripping jobs, view logs, update jobs, etc
-
-
+- Detects disc insertion with udev
+- Video (Blu-ray or DVD): title from the disc or OMDb/TMDb, MakeMKV rip, optional HandBrake or FFmpeg transcode, notifications (Apprise and others)
+- Audio CD: abcde + MusicBrainz
+- Data disc: ISO backup
+- Several optical drives in parallel
+- Headless; Python Flask UI for jobs, logs, and settings
 
 ## Usage
 
-- Insert disc
-- Wait for disc to eject
-- Repeat
-
+1. Insert disc
+2. Wait for the disc to eject
+3. Repeat
 
 ## Requirements
 
-- A system capable of running Docker containers
-- One or more optical drives to rip Blu-rays, DVDs, and CDs
-- Lots of drive space (I suggest using a NAS) to store your movies
+- Linux host that can run Docker (snap Docker is not supported)
+- One or more optical drives
+- Enough disk space for rips (a NAS is typical)
 
+## Install (Docker, from this source)
 
-## Install
+This fork is meant to be **built locally**. Native Ubuntu install scripts still exist under `scripts/installers/` but Docker is the supported path.
 
-[For normal installation please see the wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
+### 1. Host prep
 
-[For docker installation please see here](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/docker).
+Use a Linux user named `arm` in the `cdrom` and `video` groups. Confirm drives with `lsscsi -g`.
 
-[For WSL Integration please see here]()
+```bash
+sudo apt install -y git docker.io lsscsi wget
+sudo usermod -aG docker,cdrom,video arm
+```
+
+Log out and back in so group membership applies.
+
+### 2. Clone and build
+
+```bash
+git clone --recurse-submodules -b heatvent-2x \
+  https://github.com/heatvent/automatic-ripping-machine.git
+cd automatic-ripping-machine
+docker build -t automatic-ripping-machine:heatvent-2x .
+```
+
+Or run the installer (creates the `arm` user if needed, installs Docker, builds this branch, writes `~/start_arm_container.sh`):
+
+```bash
+wget https://raw.githubusercontent.com/heatvent/automatic-ripping-machine/heatvent-2x/scripts/installers/docker-setup.sh
+chmod +x docker-setup.sh
+sudo ./docker-setup.sh
+```
+
+### 3. Start the container
+
+Copy `scripts/docker/start_arm_container.sh` (the installer already places one in `~arm`). Edit it:
+
+- Set `ARM_UID` / `ARM_GID` from `id -u arm` and `id -g arm` (omit those lines if both are `1000`)
+- Set `TZ` and `ARM_HOST_IP` to this machine’s LAN IPv4 (used in the UI and notifications)
+- Point the volume paths at real host folders owned by `arm`
+- Keep one `--device=/dev/srN:/dev/srN` line per optical drive from `lsscsi -g`
+- Leave the image name `automatic-ripping-machine:heatvent-2x`
+
+```bash
+sudo ./start_arm_container.sh
+```
+
+Volumes (host path on the left, container path on the right):
+
+| Container path | Purpose |
+|---|---|
+| `/home/arm` | Home, MakeMKV settings, SQLite database |
+| `/home/arm/music` | Completed CD rips |
+| `/home/arm/logs` | Logs |
+| `/home/arm/media` | DVD/Blu-ray work and completed files (`raw`, `transcode`, `completed`) |
+| `/etc/arm/config` | `arm.yaml`, `abcde.conf`, `apprise.yaml` |
+
+### 4. First login
+
+Open `http://<host-ip>:8080/setup` **only on a new database**. That page creates the admin user. Visiting `/setup` on an existing database can wipe it.
+
+Default account (change it immediately):
+
+- Username: `admin`
+- Password: `password`
+
+Then use **Settings** to set rip paths, MakeMKV language/audio/subtitles, and Main Title Only.
+
+### Upgrading this fork
+
+```bash
+cd automatic-ripping-machine
+git pull
+docker build -t automatic-ripping-machine:heatvent-2x .
+docker stop ARM   # or whatever --name you used
+# re-run start_arm_container.sh with the same volumes
+```
+
+Do not `docker pull automaticrippingmachine/automatic-ripping-machine` expecting these changes.
+
+More detail: [arm_wiki/Docker.md](arm_wiki/Docker.md) and [arm_wiki/Docker-From-Source.md](arm_wiki/Docker-From-Source.md). Upstream wiki pages still describe the original project and Docker Hub image.
 
 ## Troubleshooting
- [Please see the wiki for troubleshooting](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/).
+
+Start with [arm_wiki/General-Troubleshooting.md](arm_wiki/General-Troubleshooting.md) and [arm_wiki/Docker-Troubleshooting.md](arm_wiki/Docker-Troubleshooting.md). Upstream: [wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki) and [Discord](https://discord.gg/FUSrn8jUcR).
 
 ## Contributing
 
-Pull requests are welcome.  Please see the [Contributing Guide](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Contributing-Guide)
+This repository is the fork. Open issues and pull requests here against `heatvent-2x`. Changes intended for everyone should also be offered upstream at [automatic-ripping-machine/automatic-ripping-machine](https://github.com/automatic-ripping-machine/automatic-ripping-machine).
 
-If you set ARM up in a different environment (hardware/OS/virtual/etc.), please consider [submitting a howto to the wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT License](LICENSE)
+[MIT License](LICENSE) (same as upstream).
