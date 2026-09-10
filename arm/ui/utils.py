@@ -22,7 +22,12 @@ from flask.logging import default_handler  # noqa: F401
 from flask_login import current_user
 
 import arm.config.config as cfg
-from arm.config.config_utils import arm_yaml_test_bool, is_secret_setting_key, restore_masked_value, setting_value_as_text
+from arm.config.config_utils import (
+    arm_yaml_test_bool,
+    is_secret_setting_key,
+    restore_masked_value,
+    setting_value_as_text,
+)
 from arm.config import config_utils
 from arm.models.alembic_version import AlembicVersion
 from arm.models.job import Job
@@ -32,7 +37,6 @@ from arm.models.user import User
 from arm.ui import app, db
 from arm.ui.metadata import tmdb_search, get_tmdb_poster, tmdb_find, call_omdb_api
 from arm.ui.settings import DriveUtils
-from arm.title_format import clean_for_filename
 
 # Path definitions
 path_migrations = "arm/migrations"

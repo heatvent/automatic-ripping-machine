@@ -10,11 +10,10 @@ import os
 import json
 import re
 from flask_login import LoginManager, login_required  # noqa: F401
-from flask import render_template, request, Blueprint, flash, redirect, session, url_for
+from flask import request, Blueprint, flash, redirect, url_for
 
 import arm.ui.utils as ui_utils
 from arm.ui import app, db, constants
-from arm.models.job import Job
 import arm.config.config as cfg
 from arm.ui.metadata import get_omdb_poster
 from arm.ui.forms import DBUpdate

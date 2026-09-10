@@ -1,6 +1,7 @@
 """Friendly labels, grouping, and validation for ARM settings UI."""
 
 import html as html_module
+import re
 
 from arm.config.config_utils import (
     BOOLEAN_SETTING_KEYS,
@@ -247,6 +248,73 @@ def page_setting_groups(settings):
     }
 
 
+def _require_int(errors, values, key, minimum=None, maximum=None):
+    """Validate one integer setting and record errors in place."""
+    if key not in values:
+        return
+    text = values[key]
+    if text == "":
+        if key in ("EMBY_PORT",):
+            return
+        errors[key] = "Enter a number."
+        return
+    try:
+        number = int(text)
+    except ValueError:
+        errors[key] = "Must be a whole number."
+        return
+    if minimum is not None and number < minimum:
+        errors[key] = f"Must be at least {minimum}."
+    if maximum is not None and number > maximum:
+        errors[key] = f"Must be at most {maximum}."
+
+
+def _validate_ripper_numbers(errors, values):
+    for key in INTEGER_SETTING_KEYS:
+        if key in PORT_SETTING_KEYS:
+            _require_int(errors, values, key, 1, 65535)
+        else:
+            _require_int(errors, values, key, 0)
+
+
+def _validate_ripper_required(errors, values):
+    for key in NONEMPTY_SETTING_KEYS:
+        if key in values and values[key] == "":
+            errors[key] = "This field is required."
+
+
+def _validate_ripper_chmod(errors, values):
+    chmod = values.get("CHMOD_VALUE")
+    if chmod is not None and chmod != "" and not re.fullmatch(r"[0-7]{3,4}", chmod):
+        errors["CHMOD_VALUE"] = "Use 3 or 4 octal digits, for example 775."
+
+
+def _validate_ripper_lengths(errors, values):
+    min_len = values.get("MINLENGTH")
+    max_len = values.get("MAXLENGTH")
+    try:
+        if min_len not in (None, "") and max_len not in (None, ""):
+            if int(min_len) > int(max_len):
+                errors["MAXLENGTH"] = "Must be greater than or equal to minimum title length."
+    except ValueError:
+        pass
+
+
+def _validate_ripper_enums(errors, values):
+    for key, choices in ENUM_SETTING_CHOICES.items():
+        if key not in values:
+            continue
+        allowed = {item[0] for item in choices}
+        if values[key] not in allowed:
+            errors[key] = "Choose one of the listed options."
+
+
+def _validate_ripper_bools(errors, values):
+    for key in BOOLEAN_SETTING_KEYS:
+        if key in values and values[key].lower() not in ("true", "false"):
+            errors[key] = "Choose Yes or No."
+
+
 def validate_ripper_form(form_data, current_settings=None):
     """Return {key: message} for invalid submitted ripper settings."""
     errors = {}
@@ -257,63 +325,12 @@ def validate_ripper_form(form_data, current_settings=None):
             continue
         values[key] = "" if raw is None else str(raw).strip()
 
-    def _int(key, minimum=None, maximum=None):
-        if key not in values:
-            return
-        text = values[key]
-        if text == "":
-            if key in ("EMBY_PORT",):
-                return
-            errors[key] = "Enter a number."
-            return
-        try:
-            number = int(text)
-        except ValueError:
-            errors[key] = "Must be a whole number."
-            return
-        if minimum is not None and number < minimum:
-            errors[key] = f"Must be at least {minimum}."
-        if maximum is not None and number > maximum:
-            errors[key] = f"Must be at most {maximum}."
-
-    for key in INTEGER_SETTING_KEYS:
-        if key in PORT_SETTING_KEYS:
-            _int(key, 1, 65535)
-        elif key in ("LOGLIFE", "MAX_CONCURRENT_TRANSCODES", "MAX_CONCURRENT_MAKEMKVINFO"):
-            _int(key, 0)
-        else:
-            _int(key, 0)
-
-    for key in NONEMPTY_SETTING_KEYS:
-        if key in values and values[key] == "":
-            errors[key] = "This field is required."
-
-    chmod = values.get("CHMOD_VALUE")
-    if chmod is not None and chmod != "":
-        import re
-        if not re.fullmatch(r"[0-7]{3,4}", chmod):
-            errors["CHMOD_VALUE"] = "Use 3 or 4 octal digits, for example 775."
-
-    min_len = values.get("MINLENGTH")
-    max_len = values.get("MAXLENGTH")
-    try:
-        if min_len not in (None, "") and max_len not in (None, ""):
-            if int(min_len) > int(max_len):
-                errors["MAXLENGTH"] = "Must be greater than or equal to minimum title length."
-    except ValueError:
-        pass
-
-    for key, choices in ENUM_SETTING_CHOICES.items():
-        if key not in values:
-            continue
-        allowed = {item[0] for item in choices}
-        if values[key] not in allowed:
-            errors[key] = "Choose one of the listed options."
-
-    for key in BOOLEAN_SETTING_KEYS:
-        if key in values and values[key].lower() not in ("true", "false"):
-            errors[key] = "Choose Yes or No."
-
+    _validate_ripper_numbers(errors, values)
+    _validate_ripper_required(errors, values)
+    _validate_ripper_chmod(errors, values)
+    _validate_ripper_lengths(errors, values)
+    _validate_ripper_enums(errors, values)
+    _validate_ripper_bools(errors, values)
     return errors
 
 

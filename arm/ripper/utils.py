@@ -7,7 +7,6 @@ import subprocess
 import shutil
 import time
 import random
-import re
 from logging import Logger
 from pathlib import Path, PurePath
 from math import ceil

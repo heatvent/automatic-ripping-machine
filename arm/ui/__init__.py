@@ -84,6 +84,7 @@ def _sqlite_enable_wal(dbapi_connection, _connection_record):
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
 
+
 # Register route blueprints
 # loaded post database declaration to avoid circular loops
 from arm.ui.settings.settings import route_settings  # noqa: E402,F811

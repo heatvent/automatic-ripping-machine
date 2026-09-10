@@ -4,7 +4,6 @@ Also used to connect to both omdb and tmdb
 """
 import os
 import signal
-import subprocess
 import threading
 import re
 import html

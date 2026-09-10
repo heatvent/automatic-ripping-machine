@@ -6,7 +6,11 @@ ABCDE_FIELDS = (
     {
         "key": "CDDBMETHOD",
         "label": "Album Lookup",
-        "help": "Where abcde gets artist and album names.\nOptions: MusicBrainz (default, recommended), CDDB, or CD-Text.\nMusicBrainz looks the disc up online. CD-Text reads names stored on the disc.",
+        "help": (
+            "Where abcde gets artist and album names.\n"
+            "Options: MusicBrainz (default, recommended), CDDB, or CD-Text.\n"
+            "MusicBrainz looks the disc up online. CD-Text reads names stored on the disc."
+        ),
         "kind": "enum",
         "choices": (
             ("musicbrainz", "MusicBrainz"),
@@ -17,7 +21,11 @@ ABCDE_FIELDS = (
     {
         "key": "OUTPUTTYPE",
         "label": "Output Format",
-        "help": "Encoded audio format written for each rip.\nCommon choices: flac, mp3, ogg, opus, wav, m4a.\nComma-separate more than one format to encode each disc several ways.",
+        "help": (
+            "Encoded audio format written for each rip.\n"
+            "Common choices: flac, mp3, ogg, opus, wav, m4a.\n"
+            "Comma-separate more than one format to encode each disc several ways."
+        ),
         "kind": "enum",
         "choices": (
             ("flac", "FLAC"),
@@ -32,49 +40,79 @@ ABCDE_FIELDS = (
     {
         "key": "OUTPUTDIR",
         "label": "Output Folder",
-        "help": "Folder where ripped CDs are written.\nInclude a trailing slash. Example: /home/arm/music/",
+        "help": (
+            "Folder where ripped CDs are written.\n"
+            "Include a trailing slash. Example: /home/arm/music/"
+        ),
         "kind": "text",
     },
     {
         "key": "OUTPUTFORMAT",
         "label": "File Name Pattern",
-        "help": "Folder and file name pattern for normal albums.\nPlaceholders: ${ARTISTFILE}, ${ALBUMFILE}, ${TRACKNUM}, and ${TRACKFILE}.\nKeep this value in single quotes in abcde.conf.",
+        "help": (
+            "Folder and file name pattern for normal albums.\n"
+            "Placeholders: ${ARTISTFILE}, ${ALBUMFILE}, ${TRACKNUM}, and ${TRACKFILE}.\n"
+            "Keep this value in single quotes in abcde.conf."
+        ),
         "kind": "text",
     },
     {
         "key": "VAOUTPUTFORMAT",
         "label": "Various-Artists Pattern",
-        "help": "Folder and file name pattern used for Various Artists discs.\nUses the same placeholders as File Name Pattern.",
+        "help": (
+            "Folder and file name pattern used for Various Artists discs.\n"
+            "Uses the same placeholders as File Name Pattern."
+        ),
         "kind": "text",
     },
     {
         "key": "PADTRACKS",
         "label": "Pad Track Numbers",
-        "help": "Write track numbers with a leading zero.\nOptions: Yes or No.\nYes writes 01, 02, 03 instead of 1, 2, 3.",
+        "help": (
+            "Write track numbers with a leading zero.\n"
+            "Options: Yes or No.\n"
+            "Yes writes 01, 02, 03 instead of 1, 2, 3."
+        ),
         "kind": "yn",
     },
     {
         "key": "INTERACTIVE",
         "label": "Ask Questions While Ripping",
-        "help": "Ask questions on the console while ripping.\nOptions: Yes or No.\nNo (recommended for ARM) rips without prompts. ARM also passes abcde -N, so unattended jobs will not wait for a keyboard even if this is Yes.",
+        "help": (
+            "Ask questions on the console while ripping.\n"
+            "Options: Yes or No.\n"
+            "No (recommended for ARM) rips without prompts. ARM also passes abcde -N, "
+            "so unattended jobs will not wait for a keyboard even if this is Yes."
+        ),
         "kind": "yn",
     },
     {
         "key": "EJECTCD",
         "label": "Eject After Reading",
-        "help": "Eject the CD after tracks have been read.\nOptions: Yes or No.\nARM also has Eject When Finished on the Ripper tab; you usually only need one of these.",
+        "help": (
+            "Eject the CD after tracks have been read.\n"
+            "Options: Yes or No.\n"
+            "ARM also has Eject When Finished on the Ripper tab; you usually only need one of these."
+        ),
         "kind": "yn",
     },
     {
         "key": "KEEPWAVS",
         "label": "Keep WAV Files",
-        "help": "Keep the temporary WAV files after encoding.\nOptions: Yes or No.\nYes uses more disk space. No deletes the WAVs after the chosen output format is written.",
+        "help": (
+            "Keep the temporary WAV files after encoding.\n"
+            "Options: Yes or No.\n"
+            "Yes uses more disk space. No deletes the WAVs after the chosen output format is written."
+        ),
         "kind": "yn",
     },
     {
         "key": "MAXPROCS",
         "label": "Parallel Encoders",
-        "help": "How many encode processes to run at once.\nHigher is faster on multi-core systems. Allowed range: 1 to 32.",
+        "help": (
+            "How many encode processes to run at once.\n"
+            "Higher is faster on multi-core systems. Allowed range: 1 to 32."
+        ),
         "kind": "int",
         "minimum": 1,
         "maximum": 32,
@@ -82,7 +120,11 @@ ABCDE_FIELDS = (
     {
         "key": "ACTIONS",
         "label": "Rip Actions",
-        "help": "Comma-separated abcde actions run for each CD.\nTypical set: musicbrainz,read,encode,tag,move,clean,playlist,getalbumart,embedalbumart.\nChange this only if you know which abcde steps you want to skip or add.",
+        "help": (
+            "Comma-separated abcde actions run for each CD.\n"
+            "Typical set: musicbrainz,read,encode,tag,move,clean,playlist,getalbumart,embedalbumart.\n"
+            "Change this only if you know which abcde steps you want to skip or add."
+        ),
         "kind": "text",
     },
 )
