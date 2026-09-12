@@ -663,11 +663,9 @@ def _drive_tray_action(drive_id, method):
         app.logger.error(f"Drive tray action encountered an error: {err}")
         flash(f"Cannot find drive {drive_id} in database.", "error")
         return _drive_action_redirect()
-    labels = {"eject": "Opened the tray.", "close": "Closed the tray.", "toggle": "Toggled the tray."}
     if (error := drive.eject(method=method)) is not None:
         flash(error, "error")
-    else:
-        flash(labels.get(method, "Tray command finished."), "success")
+    # Do not flash success: Home already shows Open/Close next to drive status.
     try:
         db.session.commit()
     except Exception as err:  # noqa: BLE001

@@ -10,16 +10,16 @@
 			{{ form.hidden_tag() }}
 			<div class="input-group mb-3">
 				<div class="input-group-prepend">
-					<span class="input-group-text" id="searchtitle">Title</span>
+					<span class="input-group-text" id="searchtitle">{{ 'Album' if is_music|default(false) else 'Title' }}</span>
 				</div>
-				<input type="text" class="form-control" aria-label="searchtitle" name="title" value="{{job.title}}" aria-describedby="searchtitle">
+				<input type="text" class="form-control" aria-label="searchtitle" name="title" value="{{ search_title }}" aria-describedby="searchtitle" placeholder="{{ 'Artist or album' if is_music|default(false) else 'Title' }}">
 			    <div class="invalid-tooltip">
 					Search can't be blank
 				</div>
 				<div class="input-group-prepend">
 					<span class="input-group-text" id="basic-addon1">Year</span>
 				</div>
-				<input type="text" class="form-control" name="year" value="{{job.year}}" aria-label="year" aria-describedby="basic-addon1">
+				<input type="text" class="form-control" name="year" value="{{ search_year|default('') }}" aria-label="year" aria-describedby="basic-addon1">
 			</div>
 			<input class="form-control" name="save" value="save" hidden>
 			<input class="form-control" name="job_id" value="{{ job.job_id }}" hidden>

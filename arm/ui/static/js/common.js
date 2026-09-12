@@ -91,12 +91,15 @@ function transcodingCheck(job) {
             x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${job.avg_fps}</div>`;
         }
     }
-    // YYYY-MM-DD
-    const d = new Date(Date.parse(job.start_time));
-    const datestring = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
-
-    x += `<strong>Start Date:</strong> ${datestring}<br>`;
-    x += `<strong>Start Time:</strong> ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}<br>`;
+    // Use ARM Date Format from Settings when the API sends it.
+    if (job.start_display) {
+        x += `<strong>Started:</strong> ${escapeHtml(job.start_display)}<br>`;
+    } else {
+        const d = new Date(Date.parse(job.start_time));
+        const datestring = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+        x += `<strong>Start Date:</strong> ${datestring}<br>`;
+        x += `<strong>Start Time:</strong> ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}<br>`;
+    }
     x += `<strong>Job Time:</strong> ${job.job_length === undefined ? "Ongoing" : job.job_length}<br>`;
     return x;
 }
@@ -119,9 +122,21 @@ function hasPosterUrl(job) {
         job.poster_url !== "null";
 }
 
+function albumCoverFallback(job) {
+    const crc = String((job && job.crc_id) || "");
+    if (isMusicJob(job) && (crc.match(/-/g) || []).length === 4) {
+        return `https://coverartarchive.org/release/${crc}/front-500`;
+    }
+    return "";
+}
+
 function jobPosterSrc(job) {
     if (hasPosterUrl(job)) {
         return job.poster_url;
+    }
+    const cover = albumCoverFallback(job);
+    if (cover) {
+        return cover;
     }
     if (isMusicJob(job)) {
         return "/static/img/music.png";
@@ -142,7 +157,9 @@ function jobCoverClass(job, extraClass) {
 
 function jobCoverHtml(job, extraClass, imgAttrs) {
     const id = imgAttrs && imgAttrs.id ? ` id="${imgAttrs.id}"` : "";
-    return `<span class="${jobCoverClass(job, extraClass)}"><img${id} src="${jobPosterSrc(job)}" alt="" loading="lazy"></span>`;
+    const placeholder = isMusicJob(job) ? "/static/img/music.png" : "/static/img/none.png";
+    const onerror = ` onerror="this.onerror=null;this.src='${placeholder}'"`;
+    return `<span class="${jobCoverClass(job, extraClass)}"><img${id} src="${jobPosterSrc(job)}" alt="" loading="lazy"${onerror}></span>`;
 }
 
 function musicCheck(job, idsplit) {
@@ -182,11 +199,11 @@ function statusLabel(status, job) {
     const key = raw.toLowerCase();
     const disc = String((job && (job.disctype || job.video_type)) || "").toLowerCase();
     const isMusic = disc === "music";
-    if (isMusic && key === "info") {
-        return "MusicBrainz";
+    if (isMusic && (key === "info" || key === "active")) {
+        return "Identifying";
     }
     if (isMusic && key === "ripping") {
-        return "abcde";
+        return "Ripping";
     }
     if (key === "info") {
         return "Identify";
@@ -220,7 +237,8 @@ function statusBadgeHtml(id, status, job) {
 }
 
 function titleManual(job) {
-    const title = (job.title_manual && job.title_manual !== "None") ? job.title_manual : job.title;
+    const raw = (job.title_manual && job.title_manual !== "None") ? job.title_manual : job.title;
+    const title = (raw && raw !== "None" && raw !== "null") ? raw : "Title unknown";
     const year = (job.year && job.year !== "None") ? job.year : "";
     return year ? `${title} (${year})` : `${title}`;
 }
@@ -291,6 +309,10 @@ function buildRightSection(job, idsplit, authenticated) {
             x += `<button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="abandon" data-jobid="${idsplit[1]}"
               data-href="json?job=${idsplit[1]}&mode=abandon">Abandon Job</button>
               <a href="logs?logfile=${job.logfile}&mode=full" class="btn btn-sm btn-primary">View Logfile</a>`;
+            if (typeof isMusicJob === "function" && isMusicJob(job)) {
+                x += `<a href="titlesearch?job_id=${idsplit[1]}" class="btn btn-sm btn-primary">Title Search</a>
+              <a href="customTitle?job_id=${idsplit[1]}" class="btn btn-sm btn-primary">Custom Title</a>`;
+            }
         } else {
             x += `<button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#exampleModal" data-type="delete" data-jobid="${idsplit[1]}"
               data-href="json?job=${idsplit[1]}&mode=delete">Delete Job</button>

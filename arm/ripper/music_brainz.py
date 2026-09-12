@@ -3,6 +3,7 @@
 
 import logging
 import re
+import time
 import musicbrainzngs as mb
 import werkzeug
 from discid import read, Disc
@@ -21,9 +22,40 @@ def main(disc):
     or "".
     """
     discid = get_disc_id(disc)
+    remember_disc_track_count(disc, discid)
     if cfg.arm_config['GET_AUDIO_TITLE'] == 'musicbrainz':
         return music_brainz(discid, disc)
     return ""
+
+
+def disc_id_string(discid) -> str:
+    """MusicBrainz disc ID from a python-discid object or a raw string."""
+    return str(getattr(discid, "id", None) or discid)
+
+
+def disc_toc_string(discid):
+    """TOC string for MusicBrainz fuzzy lookup, or None."""
+    toc = getattr(discid, "toc_string", None)
+    return str(toc) if toc else None
+
+
+def remember_disc_track_count(job, discid) -> int:
+    """Keep the CD track count even when MusicBrainz does not identify the album."""
+    count = 0
+    last = getattr(discid, "last_track_num", None)
+    try:
+        count = int(last or 0)
+    except (TypeError, ValueError):
+        count = 0
+    if not count:
+        tracks = getattr(discid, "tracks", None)
+        try:
+            count = len(list(tracks)) if tracks is not None else 0
+        except TypeError:
+            count = 0
+    if count and not getattr(job, "no_of_titles", None):
+        u.database_updater({"no_of_titles": count}, job)
+    return count
 
 
 def get_disc_id(disc):
@@ -66,181 +98,202 @@ def music_brainz(discid: str, job) -> str:
 
     disc_info = get_disc_info(job, discid)
     if disc_info == "":
-        logging.error("ARM has encountered an error and stopping")
+        logging.info("MusicBrainz did not return a match for this disc")
         return ""
 
     artist_title = check_musicbrainz_data(job, disc_info)
     if artist_title == "":
-        logging.error("ARM has encountered an error and stopping")
+        logging.info("MusicBrainz returned data that did not identify this album")
         return ""
 
     return artist_title
 
 
+def _mb_retryable(exc) -> bool:
+    text = str(exc).lower()
+    return isinstance(exc, mb.NetworkError) or "503" in text or "busy" in text or "rate" in text
+
+
+def _mb_lookup(discid_str, toc=None, cdstubs=True):
+    kwargs = {
+        "includes": ["artist-credits", "recordings", "release-groups"],
+        "cdstubs": cdstubs,
+    }
+    if toc:
+        kwargs["toc"] = toc
+    return mb.get_releases_by_discid(discid_str, **kwargs)
+
+
 def get_disc_info(job, discid: str) -> str:
-    """
-    Retrieve CD release information from MusicBrainz using the disc ID.
-
-    This function contacts the MusicBrainz web service with a given disc ID
-    to fetch associated release metadata such as artist credits and recordings.
-
-    Parameters
-    ----------
-    job
-        The job object containing configuration, including the ARM version used in the user agent.
-    discid : str
-        The disc ID to query in MusicBrainz.
-
-    Returns
-    -------
-    dict
-        A dictionary containing release information if successful.
-        Returns an empty string if an error occurs (e.g., network error, invalid disc ID).
-    """
-
-    # Tell musicbrainz what your app is, and how to contact you
-    # (this step is required, as per the webservice access rules
-    # at http://wiki.musicbrainz.org/XML_Web_Service/Rate_Limiting )
+    """Look up a disc on MusicBrainz, retrying busy errors and falling back to TOC search."""
     mb.set_useragent(app="arm", version=str(job.arm_version), contact="https://github.com/automatic-ripping-machine")
+    disc_id_str = disc_id_string(discid)
+    toc = disc_toc_string(discid)
+    logging.info("MusicBrainz disc id: %s", disc_id_str)
+    if toc:
+        logging.info("MusicBrainz TOC: %s", toc)
+    submit = getattr(discid, "submission_url", None)
+    if submit:
+        logging.info("MusicBrainz submit URL: %s", submit)
 
-    # Get CD info from musicbrainz and catch any errors
+    delays = (1.5, 3.0, 6.0)
+    last_exc = None
+    for attempt in range(len(delays) + 1):
+        try:
+            return _mb_lookup(disc_id_str, toc=toc)
+        except mb.WebServiceError as exc:
+            last_exc = exc
+            if _mb_retryable(exc) and attempt < len(delays):
+                logging.warning("MusicBrainz busy (attempt %s/%s): %s",
+                                attempt + 1, len(delays) + 1, exc)
+                time.sleep(delays[attempt])
+                continue
+            logging.error("MusicBrainz lookup failed: %s", exc)
+            break
+
+    if toc:
+        try:
+            logging.info("Trying MusicBrainz fuzzy TOC search")
+            return _mb_lookup("-", toc=toc, cdstubs=False)
+        except mb.WebServiceError as exc:
+            logging.error("MusicBrainz TOC search failed: %s", exc)
+            last_exc = exc
+    if last_exc:
+        logging.error("Cant reach MB or cd not found ? - ERROR: %s", last_exc)
+    return ""
+
+
+def _medium_track_count(medium) -> int:
+    tracks = medium.get("track-list") or []
+    if tracks:
+        return len(tracks)
     try:
-        disc_info = mb.get_releases_by_discid(discid, includes=['artist-credits', 'recordings'])
-        logging.debug(f"discid: [{discid}]")
-        # Debugging, will dump the entire xml/json data from musicbrainz
-        # logging.debug(f"disc_info: {disc_info}")
+        return int(medium.get("track-count") or 0)
+    except (TypeError, ValueError):
+        return 0
 
-    except mb.WebServiceError as exc:
-        logging.error(f"Cant reach MB or cd not found ? - ERROR: {exc}")
-        u.database_updater(False, job)
-        disc_info = ""
 
-    return disc_info
+def _medium_is_cd(medium) -> bool:
+    fmt = str(medium.get("format") or "").upper()
+    return (not fmt) or ("CD" in fmt)
+
+
+def _artist_name(release) -> str:
+    credit = release.get("artist-credit") or []
+    if not credit:
+        return ""
+    first = credit[0]
+    if isinstance(first, str):
+        return first
+    return (first.get("artist") or {}).get("name") or first.get("name") or ""
+
+
+def pick_cd_release(release_list, wanted_tracks=None):
+    """Pick the best CD-like medium from a MusicBrainz release list."""
+    scored = []
+    try:
+        wanted = int(wanted_tracks) if wanted_tracks else 0
+    except (TypeError, ValueError):
+        wanted = 0
+    for release in release_list or []:
+        for medium in release.get("medium-list") or []:
+            count = _medium_track_count(medium)
+            score = 0
+            if _medium_is_cd(medium):
+                score += 2
+            if wanted and count == wanted:
+                score += 5
+            elif wanted and count:
+                score += max(0, 2 - abs(count - wanted))
+            scored.append((score, release, medium))
+    if not scored:
+        return None, None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return scored[0][1], scored[0][2]
+
+
+def apply_album_release(job, release, medium, disc_info) -> str:
+    """Store artist/album/year/tracks from one MusicBrainz release."""
+    process_tracks(job, medium.get("track-list") or [])
+    new_year = check_date(release)
+    title = str(release.get("title") or "no title")
+    artist = _artist_name(release) or "Unknown Artist"
+    disc = disc_info.get("disc") or {}
+    no_of_titles = disc.get("offset-count") or _medium_track_count(medium) or job.no_of_titles
+    artist_title = u.clean_for_filename(f"{artist} {title}")
+    poster = resolve_cover_url(release.get("id"), release)
+    args = {
+        "job_id": str(job.job_id),
+        "crc_id": release.get("id"),
+        "hasnicetitle": True,
+        "year": str(new_year),
+        "year_auto": str(new_year),
+        "title": artist_title,
+        "title_auto": artist_title,
+        "video_type": "Music",
+        "no_of_titles": no_of_titles,
+        "poster_url": poster,
+        "poster_url_auto": poster,
+    }
+    logging.info("CD args: %s", args)
+    u.database_updater(args, job)
+    cover = (release.get("cover-art-archive") or {}).get("artwork")
+    logging.info("do have artwork?======%s", cover)
+    if get_cd_art(job, disc_info, release=release):
+        logging.debug("we got an art image")
+    else:
+        logging.debug("we didnt get art image")
+    return artist_title
 
 
 def check_musicbrainz_data(job, disc_info: dict) -> str:
-    """
-    Process MusicBrainz metadata for a disc or CD stub and update the job database.
+    """Process MusicBrainz disc, CD stub, or fuzzy TOC release-list data."""
+    if not disc_info:
+        return ""
 
-    This function inspects the given `disc_info` dictionary for either full disc metadata
-    or CD stub data. It extracts track information, album title, artist, release year,
-    and number of tracks. It also attempts to download cover art if available, and
-    updates the job's associated metadata in the database.
-
-    Parameters
-    ----------
-    job
-        The job object that contains the current disc processing context, including
-        logging and database update functionality.
-    disc_info : dict
-        A dictionary response from MusicBrainz containing metadata under either a
-        'disc' or 'cdstub' key.
-
-    Returns
-    -------
-    str
-        A combined artist and album title string if successful, or empty string
-        if no valid data was processed.
-
-    Notes
-    -----
-    - If 'disc' metadata is present, the function checks for a CD-format release and processes the first one.
-    - If only 'cdstub' metadata is available, it uses that limited data instead.
-    - Track data is passed to `process_tracks()` to record each entry.
-    - Album metadata is recorded using `u.database_updater()`.
-    - Attempts to retrieve album artwork if full release data is present.
-    - Returns a string containing the "Artist Title" if successful, otherwise False.
-    """
-
-    music_data = ""
-
-    # Check if valid disc or cdstub data present in data
-    # If not, stop and return an empty string
-    if 'disc' not in disc_info and 'cdstub' not in disc_info:
-        logging.error("No release information reported by MusicBrainz")
-        return music_data
-
-    if 'disc' in disc_info:
+    if "disc" in disc_info:
         logging.info("Processing as a disc")
-        release_list = disc_info['disc'].get('release-list', [])
-        logging.debug(f"Number of releases: {len(release_list)}")
+        release_list = disc_info["disc"].get("release-list", [])
+        logging.debug("Number of releases: %s", len(release_list))
+        release, medium = pick_cd_release(release_list, job.no_of_titles)
+        if release and medium:
+            return apply_album_release(job, release, medium, disc_info)
+        logging.info("MusicBrainz disc had no usable CD release")
+        return ""
 
-        # Check returned data has a release_list (album release info), otherwise return empty
-        if len(release_list) > 0:
-            # Loop through release data and find first that is a CD
-            for i in range(len(release_list)):
-                logging.debug(f"Checking release: [{i}] if CD")
-                medium_list = release_list[i].get('medium-list', [])
-                # Check that medium_list is valid (has data) and that we have returned a CD
-                # possible values are "12' Vinyl" or "CD" from testing
-                if medium_list and medium_list[0].get('format') == "CD":
-                    logging.info(f"Release [{i}] is a CD, tracking on...")
-                    logging.debug("-" * 50)
-                    process_tracks(job, medium_list[0].get('track-list'))
-                    logging.debug("-" * 50)
-
-                    # Update ARM with disc info
-                    release = disc_info['disc']['release-list'][i]
-                    new_year = check_date(release)
-                    title = str(release.get('title', 'no title'))
-                    artist = release['artist-credit'][0]['artist']['name']
-                    no_of_titles = disc_info['disc']['offset-count']
-                    artist_title = u.clean_for_filename(f"{artist} {title}")
-                    # Set out release id as the CRC_ID
-                    args = {
-                        'job_id': str(job.job_id),
-                        'crc_id': release['id'],
-                        'hasnicetitle': True,
-                        'year': str(new_year),
-                        'year_auto': str(new_year),
-                        'title': artist_title,
-                        'title_auto': artist_title,
-                        'video_type': 'Music',
-                        'no_of_titles': no_of_titles
-                    }
-                    logging.info(f"CD args: {args}")
-                    u.database_updater(args, job)
-                    logging.debug(f"musicbrain works -  New title is {title}  New Year is: {new_year}")
-
-                    # Get album art work
-                    logging.info(f"do have artwork?======{release['cover-art-archive']['artwork']}")
-                    if get_cd_art(job, disc_info):
-                        logging.debug("we got an art image")
-                    else:
-                        logging.debug("we didnt get art image")
-                    music_data = artist_title
-
-    # Run if not a disc, but a cdstub (limited data)
-    # No check on release is done here, assuming cdstub is limited to CDs
-    elif 'cdstub' in disc_info:
+    if "cdstub" in disc_info:
         logging.info("Processing as a cdstub")
-        process_tracks(job, disc_info['cdstub']['track-list'], is_stub=True)
-
-        # Update ARM with disc info
-        title = str(disc_info['cdstub']['title'])
-        artist = disc_info['cdstub']['artist']
-        no_of_titles = disc_info['cdstub']['track-count']
-        new_year = ''
+        process_tracks(job, disc_info["cdstub"].get("track-list") or [], is_stub=True)
+        title = str(disc_info["cdstub"].get("title") or "")
+        artist = disc_info["cdstub"].get("artist") or ""
+        no_of_titles = disc_info["cdstub"].get("track-count")
         artist_title = u.clean_for_filename(f"{artist} {title}")
         args = {
-            'job_id': str(job.job_id),
-            'crc_id': disc_info['cdstub']['id'],
-            'hasnicetitle': True,
-            'year': new_year,
-            'year_auto': new_year,
-            'title': artist_title,
-            'title_auto': artist_title,
-            'video_type': 'Music',
-            'no_of_titles': no_of_titles
+            "job_id": str(job.job_id),
+            "crc_id": disc_info["cdstub"].get("id"),
+            "hasnicetitle": True,
+            "year": "",
+            "year_auto": "",
+            "title": artist_title,
+            "title_auto": artist_title,
+            "video_type": "Music",
+            "no_of_titles": no_of_titles,
         }
-        logging.info(f"cdstub args: {args}")
+        logging.info("cdstub args: %s", args)
         u.database_updater(args, job)
         logging.info("do have artwork?======No (cdstub)")
-        logging.debug(f"musicbrain works, but stubbed -  New title is {artist_title}")
+        return artist_title
 
-        music_data = artist_title
+    if "release-list" in disc_info:
+        logging.info("Processing MusicBrainz TOC fuzzy match")
+        release, medium = pick_cd_release(disc_info.get("release-list"), job.no_of_titles)
+        if release and medium:
+            return apply_album_release(job, release, medium, disc_info)
+        logging.info("MusicBrainz TOC search had no usable CD release")
+        return ""
 
-    return music_data
+    logging.error("No release information reported by MusicBrainz")
+    return ""
 
 
 def check_date(release: dict) -> str:
@@ -319,7 +372,6 @@ def get_title(discid: str, job) -> str:
             # Different id format, but what can you do?
             crc_id = str(disc_info['cdstub']['id'])
         else:
-            u.database_updater(False, job)
             return "not identified"
 
         clean_title = u.clean_for_filename(artist) + "-" + u.clean_for_filename(title)
@@ -333,122 +385,199 @@ def get_title(discid: str, job) -> str:
         u.database_updater(args, job)
         return clean_title
     except (mb.WebServiceError, KeyError):
-        u.database_updater(False, job)
         return "not identified"
 
 
-def get_cd_art(job, disc_info: str) -> bool:
-    """
-    Retrieve and store CD artwork from MusicBrainz if available.
-
-    This function searches the MusicBrainz release list for the first release that
-    contains cover art. It then queries the Cover Art Archive for available images,
-    updates the job record with the image URLs, and returns a success flag.
-
-    Parameters
-    ----------
-    job
-        The job object containing the database record to update.
-    disc_info : dict
-        JSON object returned by the MusicBrainz API containing disc and release metadata.
-
-    Returns
-    -------
-    bool
-        True if artwork was found and saved, False if no artwork was found or an error occurred.
-
-    Notes
-    -----
-    The function handles common MusicBrainz errors such as:
-    - 400: Invalid release ID (not a valid UUID)
-    - 404: No release exists with the given MBID
-    - 503: Rate limit exceeded or service unavailable
-    These errors are logged, and the job record is updated to reflect the failure.
-    """
+def get_cd_art(job, disc_info: str, release=None) -> bool:
+    """Retrieve and store CD artwork from MusicBrainz if available."""
     try:
-        # Use the build-in images from coverartarchive if available
-        if 'disc' in disc_info:
-            release_list = disc_info['disc']['release-list']
-            logging.debug(f"release_list: {release_list}")
-            first_release_with_artwork = next(
-                (release for release in release_list if release.get('cover-art-archive', {}).get('artwork') != "false"),
-                None
-            )
-            logging.debug(f"first_release_with_artwork: {first_release_with_artwork}")
-
-            if first_release_with_artwork is not None:
-                # Call function from
-                #  https://python-musicbrainzngs.readthedocs.io/en/v0.7/api/#musicbrainzngs.get_image_list
-                # 400: Releaseid is not a valid UUID
-                # 404: No release exists with an MBID of releaseid
-                # 503: Ratelimit exceeded
-                artlist = mb.get_image_list(first_release_with_artwork['id'])
-                logging.debug(f"artlist: {artlist}")
-
-                for image in artlist["images"]:
-                    # We dont care if its verified ?
-                    if "image" in image:
-                        args = {
-                            'poster_url': str(image["image"]),
-                            'poster_url_auto': str(image["image"])
-                        }
-                        u.database_updater(args, job)
-                        logging.debug(f"poster_url: {args['poster_url']} poster_url_auto: {args['poster_url_auto']}")
-                        return True
-        return False
+        if release is not None:
+            release_list = [release]
+        elif disc_info and "disc" in disc_info:
+            release_list = disc_info["disc"].get("release-list") or []
+        elif disc_info and "release-list" in disc_info:
+            release_list = disc_info.get("release-list") or []
+        else:
+            return False
+        logging.debug("release_list: %s", release_list)
+        first_release_with_artwork = next(
+            (
+                item for item in release_list
+                if item.get("id") and item.get("cover-art-archive", {}).get("artwork") != "false"
+            ),
+            None,
+        )
+        chosen = first_release_with_artwork or (release if release and release.get("id") else None)
+        if chosen is None and release_list:
+            chosen = next((item for item in release_list if item.get("id")), None)
+        if chosen is None:
+            return False
+        poster = resolve_cover_url(chosen.get("id"), chosen)
+        if not poster:
+            return False
+        u.database_updater({"poster_url": poster, "poster_url_auto": poster}, job)
+        logging.debug("poster_url: %s", poster)
+        return True
     except mb.WebServiceError as exc:
-        u.database_updater(False, job)
-        logging.error(f"get_cd_art ERROR: {exc}")
+        logging.error("get_cd_art ERROR: %s", exc)
         return False
 
 
 def process_tracks(job, mb_track_list: dict, is_stub=False):
-    """
-    Process a list of MusicBrainz tracks and store them in the database.
-
-    Iterates over a list of track dictionaries obtained from MusicBrainz and
-    extracts track number, length, and title. These are then stored using
-    the `put_track` utility function. Handles both stub and full metadata modes.
-
-    Parameters
-    ----------
-    job
-        The job object that contains metadata and database context.
-    mb_track_list : list of dict
-        List of track entries from MusicBrainz, either full recordings or stub data.
-    is_stub : bool, optional
-        If True, process tracks using stub (simplified) structure. Default is False.
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    - Tracks with missing or invalid lengths will be logged but still processed.
-    - A default title like "Untitled track X" will be used if no title is found in stub mode.
-    - Each processed track is stored using `u.put_track()`.
-    """
-    for (idx, track) in enumerate(mb_track_list):
+    """Store MusicBrainz tracks; missing length/title must not abort identification."""
+    for idx, track in enumerate(mb_track_list or []):
         track_leng = 0
+        rec = track.get("recording") or {}
         try:
             if is_stub:
-                track_leng = int(track['length'])
+                track_leng = int(track.get("length") or 0)
             else:
-                track_leng = int(track['recording']['length'])
-        except ValueError:
+                track_leng = int(rec.get("length") or track.get("length") or 0)
+        except (TypeError, ValueError, KeyError):
             logging.error("Failed to find track length")
-        trackno = track.get('number', idx + 1)
+            track_leng = 0
+        trackno = track.get("number", idx + 1)
         if is_stub:
-            title = track.get('title', f"Untitled track {trackno}")
+            title = track.get("title") or f"Untitled track {trackno}"
         else:
-            title = track['recording']['title']
+            title = rec.get("title") or track.get("title") or f"Untitled track {trackno}"
         u.put_track(job, trackno, track_leng, "n/a", 0.1, False, "ABCDE", title)
 
 
 _RELEASE_MBID = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
+_PLACEHOLDER_TITLES = frozenset({"", "not identified", "none", "null", "title unknown"})
+
+
+def is_release_mbid(value):
+    """True when value looks like a MusicBrainz release UUID."""
+    return bool(value and _RELEASE_MBID.match(str(value)))
+
+
+def cover_url_for_release(mbid):
+    """Cover Art Archive front image for a MusicBrainz release."""
+    if not is_release_mbid(mbid):
+        return None
+    return f"https://coverartarchive.org/release/{mbid}/front-500"
+
+
+def cover_url_for_release_group(mbid):
+    """Cover Art Archive front image for a MusicBrainz release group."""
+    if not is_release_mbid(mbid):
+        return None
+    return f"https://coverartarchive.org/release-group/{mbid}/front-500"
+
+
+def _release_group_id(release):
+    group = (release or {}).get("release-group")
+    if isinstance(group, dict):
+        return group.get("id")
+    return None
+
+
+def _first_cover_url(artlist):
+    images = (artlist or {}).get("images") or []
+    chosen = next((image for image in images if image.get("front")), None) or (images[0] if images else None)
+    if not chosen:
+        return None
+    thumbs = chosen.get("thumbnails") or {}
+    return thumbs.get("500") or thumbs.get("large") or thumbs.get("small") or chosen.get("image")
+
+
+def resolve_cover_url(mbid, release=None):
+    """Working cover URL: this edition if CAA has it, otherwise the release group."""
+    try:
+        if is_release_mbid(mbid):
+            url = _first_cover_url(mb.get_image_list(mbid))
+            if url:
+                return url
+    except mb.WebServiceError as exc:
+        logging.debug("CAA release images failed for %s: %s", mbid, exc)
+    rgid = _release_group_id(release)
+    try:
+        if is_release_mbid(rgid) and hasattr(mb, "get_release_group_image_list"):
+            url = _first_cover_url(mb.get_release_group_image_list(rgid))
+            if url:
+                return url
+    except mb.WebServiceError as exc:
+        logging.debug("CAA release-group images failed for %s: %s", rgid, exc)
+    return cover_url_for_release_group(rgid) or cover_url_for_release(mbid)
+
+
+def _mb_useragent(arm_version="unknown"):
+    mb.set_useragent(
+        "arm",
+        version=str(arm_version or "unknown"),
+        contact="https://github.com/automatic-ripping-machine",
+    )
+
+
+def search_releases_for_ui(query, year="", arm_version="unknown"):
+    """Search MusicBrainz releases for the Title Search page.
+
+    Returns the same OMDb-shaped dict list_titles.html already renders, with
+    the release MBID in imdbID so gettitle/updatetitle can reuse those URLs.
+    """
+    title = " ".join(str(query or "").split())
+    if title.lower() in _PLACEHOLDER_TITLES:
+        return {"Search": []}
+    year = str(year or "").strip()
+    lucene = title
+    if year.isdigit():
+        lucene = f"{title} AND date:{year}"
+    try:
+        _mb_useragent(arm_version)
+        info = mb.search_releases(query=lucene, limit=20)
+    except mb.WebServiceError:
+        logging.debug("MusicBrainz release search failed for %s", lucene, exc_info=True)
+        return {"Search": [], "Error": "MusicBrainz search failed"}
+    results = []
+    for release in info.get("release-list") or []:
+        mbid = release.get("id") or ""
+        if not is_release_mbid(mbid):
+            continue
+        artist = _artist_name(release)
+        album = release.get("title") or ""
+        date = str(release.get("date") or "")
+        display = f"{artist} {album}".strip() if artist else album
+        results.append({
+            "Title": display,
+            "Year": date[:4] if date else "",
+            "imdbID": mbid,
+            "Type": "Music",
+            "Poster": f"https://coverartarchive.org/release/{mbid}/front-250",
+        })
+    return {"Search": results}
+
+
+def release_card_for_ui(mbid, arm_version="unknown"):
+    """OMDb-shaped dict for the Title Search confirmation page."""
+    details = release_details_for_ui(mbid, arm_version)
+    if not details:
+        return None
+    poster = f"https://coverartarchive.org/release/{mbid}/front-500"
+    try:
+        _mb_useragent(arm_version)
+        poster = resolve_cover_url(mbid) or poster
+    except mb.WebServiceError:
+        logging.debug("Cover art lookup failed for %s", mbid, exc_info=True)
+    artist = details.get("artist") or ""
+    album = details.get("album") or ""
+    title = f"{artist} {album}".strip() if artist else album
+    bits = [details.get("primary_type") or "Album"]
+    if details.get("label"):
+        bits.append(details["label"])
+    if details.get("country"):
+        bits.append(details["country"])
+    return {
+        "Title": title,
+        "Year": details.get("year") or "",
+        "imdbID": mbid,
+        "Type": "Music",
+        "Poster": poster,
+        "Plot": " · ".join(bits),
+    }
 
 
 def release_details_for_ui(mbid, arm_version="unknown"):
@@ -459,14 +588,10 @@ def release_details_for_ui(mbid, arm_version="unknown"):
     whatever ARM already stored on the job. Barcode and catalog number come from
     the release, not OMDb/IMDb.
     """
-    if not mbid or not _RELEASE_MBID.match(str(mbid)):
+    if not is_release_mbid(mbid):
         return None
     try:
-        mb.set_useragent(
-            "arm",
-            version=str(arm_version or "unknown"),
-            contact="https://github.com/automatic-ripping-machine",
-        )
+        _mb_useragent(arm_version)
         info = mb.get_release_by_id(
             mbid, includes=["artists", "labels", "release-groups"]
         )

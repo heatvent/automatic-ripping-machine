@@ -12,6 +12,7 @@ from arm.models.job import (  # noqa: E402
     JOB_STATUS_FINISHED,
     Job,
     JobState,
+    audio_track_count_from_udev,
     classify_disc_from_udev,
     job_has_terminal_status,
     job_holds_drive,
@@ -20,11 +21,14 @@ from arm.models.job import (  # noqa: E402
 )
 from arm.models.system_drives import SystemDrives, tray_command_lists  # noqa: E402
 from arm.ripper.utils import (  # noqa: E402
+    _is_abcde_workdir,
     abcde_rip_command,
     clean_for_filename,
+    clear_abcde_work_dirs,
     format_job_errors,
     promote_album_cover,
     should_wait_for_manual,
+    stop_stray_abcde,
     track_meets_minlength,
 )
 
@@ -64,6 +68,14 @@ class TestStatusLabel(unittest.TestCase):
     def test_unknown_status_title_cases(self):
         self.assertEqual(status_label("custom_step"), "Custom Step")
         self.assertEqual(status_label(None), "")
+
+    def test_music_ripping_is_ripping_not_abcde(self):
+        job = SimpleNamespace(status="ripping", disctype="music", video_type="music", config=None)
+        self.assertEqual(status_label("ripping", job=job), "Ripping")
+
+    def test_music_info_is_identifying(self):
+        job = SimpleNamespace(status="info", disctype="music", video_type="music", config=None)
+        self.assertEqual(status_label("info", job=job), "Identifying")
 
 
 class TestJobEjectRetry(unittest.TestCase):
@@ -222,6 +234,12 @@ class TestClassifyDiscFromUdev(unittest.TestCase):
         })
         self.assertEqual(disc_type, "dvd")
 
+    def test_audio_track_count_from_udev(self):
+        self.assertEqual(audio_track_count_from_udev({
+            "ID_CDROM_MEDIA_TRACK_COUNT_AUDIO": "10",
+        }), 10)
+        self.assertIsNone(audio_track_count_from_udev({}))
+
 
 class TestSerializeModelValue(unittest.TestCase):
     def test_none_stays_none(self):
@@ -322,6 +340,50 @@ class TestAbcdeRipCommand(unittest.TestCase):
         cmd = abcde_rip_command("/dev/sr0", "album.log", "/home/arm/logs")
         self.assertIn("abcde -N -d \"/dev/sr0\"", cmd)
         self.assertIn("/home/arm/logs/album.log", cmd)
+
+
+class TestAbcdeWorkDirs(unittest.TestCase):
+    def test_recognizes_cddb_session_folder(self):
+        self.assertTrue(_is_abcde_workdir("/home/arm/abcde.a00a3c0a"))
+        self.assertFalse(_is_abcde_workdir("/home/arm/abcde.conf"))
+        self.assertFalse(_is_abcde_workdir("/home/arm/music"))
+
+    def test_clear_skips_in_use_and_removes_stale(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            stale = os.path.join(tmp, "abcde.a00a3c0a")
+            busy = os.path.join(tmp, "abcde.deadbeef")
+            os.makedirs(stale)
+            os.makedirs(busy)
+
+            def _busy(path):
+                return os.path.basename(str(path)) == "abcde.deadbeef"
+
+            with patch("arm.ripper.utils.abcde_workdir_in_use", side_effect=_busy):
+                removed = clear_abcde_work_dirs(tmp)
+            self.assertEqual(removed, [stale])
+            self.assertFalse(os.path.isdir(stale))
+            self.assertTrue(os.path.isdir(busy))
+
+    @patch("arm.ripper.utils.psutil.process_iter")
+    def test_stop_stray_kills_orphaned_abcde_on_same_drive(self, mock_iter):
+        stray = MagicMock()
+        stray.info = {
+            "pid": 71666,
+            "name": "abcde",
+            "cmdline": ["/bin/bash", "/usr/bin/abcde", "-N", "-d", "/dev/sr0"],
+        }
+        other = MagicMock()
+        other.info = {
+            "pid": 99,
+            "name": "abcde",
+            "cmdline": ["/bin/bash", "/usr/bin/abcde", "-N", "-d", "/dev/sr1"],
+        }
+        mock_iter.return_value = [stray, other]
+        killed = stop_stray_abcde("/dev/sr0")
+        self.assertEqual(killed, 1)
+        stray.kill.assert_called_once()
+        other.kill.assert_not_called()
 
 
 class TestPromoteAlbumCover(unittest.TestCase):

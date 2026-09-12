@@ -24,9 +24,11 @@
                         </div>
                         <div class="card-header background-poster job-detail-art">
                             <div class="job-detail-poster">
-                            {% if jobs.poster_url %}
+                            {% if jobs.poster_url and jobs.poster_url not in ['None', 'N/A', 'null'] %}
                                 {# Music uses contain so non-square CAA covers are not cropped. #}
-                                <span class="job-cover job-cover-xl{% if is_music %} job-cover-music{% endif %}"><img src="{{ jobs.poster_url }}" alt=""></span>
+                                <span class="job-cover job-cover-xl{% if is_music %} job-cover-music{% endif %}"><img src="{{ jobs.poster_url }}" alt="" onerror="this.onerror=null;this.src='{{ 'static/img/music.png' if is_music else 'static/img/none.png' }}'"></span>
+                            {% elif is_music and jobs.crc_id and jobs.crc_id.count('-') == 4 %}
+                                <span class="job-cover job-cover-xl job-cover-music"><img src="https://coverartarchive.org/release/{{ jobs.crc_id }}/front-500" alt="" onerror="this.onerror=null;this.src='static/img/music.png'"></span>
                             {% elif is_music %}
                                 <span class="job-cover job-cover-xl job-cover-music"><img src="static/img/music.png" alt=""></span>
                             {% else %}
@@ -34,14 +36,14 @@
                             {% endif %}
                             </div>
                             <div class="job-detail-actions">
-                                {% if not is_music %}
                                 <div class="btn-group job-actions" role="group">
                                     <a href="titlesearch?job_id={{ jobs.job_id }}" class="btn btn-primary">Title Search</a>
                                     <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom Title</a>
                                 </div>
-                                <p class="small text-muted mt-2 mb-0">Title Search and Custom Title change the saved name and output folder. They do not restart MakeMKV if a rip is already running.</p>
+                                {% if is_music %}
+                                <p class="small text-muted mt-2 mb-0">Title Search looks up the album on MusicBrainz. Custom Title sets the name yourself. Neither re-rips the disc.</p>
                                 {% else %}
-                                <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom Title</a>
+                                <p class="small text-muted mt-2 mb-0">Title Search and Custom Title change the saved name and output folder. They do not restart MakeMKV if a rip is already running.</p>
                                 {% endif %}
                             </div>
                         </div>
@@ -72,7 +74,7 @@
                             <dl class="job-summary">
                                 <div><dt>Status</dt><dd>{{ status_badge(jobs.status, job=jobs) }}</dd></div>
                                 <div><dt>Device</dt><dd>{{ jobs.devpath }}</dd></div>
-                                <div><dt>Started</dt><dd>{{ jobs.start_time }}</dd></div>
+                                <div><dt>Started</dt><dd>{{ jobs.start_time.strftime(date_format) if jobs.start_time is not none else "—" }}</dd></div>
                                 <div><dt>Duration</dt><dd>{{ jobs.job_length or "—" }}</dd></div>
                                 <div><dt>Output</dt><dd class="text-break">{{ jobs.path or "—" }}</dd></div>
                                 <div><dt>Log</dt><dd>

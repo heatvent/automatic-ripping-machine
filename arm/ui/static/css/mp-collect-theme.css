@@ -1650,102 +1650,30 @@ html[data-theme="dark"] .progress-bar small {
   z-index: 2;
 }
 
-.home-idle-hint {
-  margin: 0 auto 0.5rem;
-}
-
-.home-pipeline {
-  max-width: 46rem;
-  margin: 0 auto 1.35rem;
-  font-size: 0.95rem;
-  line-height: 1.45;
-}
-
-.home-pipeline p {
-  margin: 0 0 0.4rem;
-}
-
-.home-pipeline p:last-child {
-  margin-bottom: 0;
-}
-
-.home-console {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  max-width: 920px;
-  margin: 0 auto 2.75rem;
-}
-
-.home-console-card {
-  min-width: 0;
-}
-
-html[data-theme="dark"] .home-console-card.card {
-  border: 1px solid rgba(255, 255, 255, 0.18) !important;
-  background-color: var(--card) !important;
-}
-
-.home-console-card .card-header {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.7rem 1rem;
-}
-
-.home-console-card .card-body {
-  padding: 0.35rem 0.15rem;
-}
-
-.home-console-empty,
-.home-console-meta {
-  color: var(--muted, #ffffff8c);
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.home-console-empty {
-  padding: 0.85rem 1rem;
-}
-
 .path-health-list {
   font-size: 0.9rem;
 }
 
-.path-health-row,
-.home-drive {
+.path-health-row {
   display: flex;
   gap: 0.65rem;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   margin: 0;
   padding: 0.7rem 1rem;
   border-bottom: 1px solid var(--line, #ffffff14);
 }
 
-.path-health-row {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-.home-drive {
-  flex-wrap: nowrap;
-}
-
-.path-health-row:last-child,
-.home-drive:last-child {
+.path-health-row:last-child {
   border-bottom: none;
 }
 
-.path-health-copy,
-.home-drive-copy {
+.path-health-copy {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.path-health-copy strong,
-.home-drive-copy strong {
+.path-health-copy strong {
   display: block;
   line-height: 1.3;
 }
@@ -1754,50 +1682,6 @@ html[data-theme="dark"] .home-console-card.card {
   display: block;
   font-size: 0.85rem;
   margin-top: 0.15rem;
-}
-
-.home-drive-status {
-  flex: 0 0 auto;
-  text-align: right;
-}
-
-.home-drive-actions {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.35rem;
-  align-items: center;
-}
-
-.home-drive-actions .btn {
-  min-width: 0;
-  padding-left: 0.55rem;
-  padding-right: 0.55rem;
-}
-
-.home-tray {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted, #ffffff8c);
-}
-
-.home-tray.is-open {
-  color: var(--accent, #446e9b);
-}
-
-.home-tray.is-busy {
-  color: var(--warning, #8b6b3a);
-}
-
-.home-tray.is-closed {
-  color: var(--success, #4b794b);
-}
-
-.home-tray.is-unavailable {
-  color: var(--danger, #fc2230);
 }
 
 .home-joblist {
@@ -1899,6 +1783,32 @@ html[data-theme="dark"] .home-console-card.card {
   border-radius: 0 !important;
 }
 
+.jobs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.jobs-filter-btn.status-badge {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  margin: 0;
+  font-family: inherit;
+}
+
+.jobs-filter-btn.status-badge:hover,
+.jobs-filter-btn.status-badge:focus {
+  filter: brightness(1.18);
+}
+
+.jobs-filter-btn.status-badge:focus-visible {
+  outline: 1px solid var(--accent, #e0b04a);
+  outline-offset: 2px;
+}
+
 .maintenance-copy {
   max-width: 42rem;
   color: var(--muted, #d6d6d6);
@@ -1951,12 +1861,6 @@ html[data-theme="dark"] .home-console-card.card {
     width: 100%;
     max-width: none;
     margin-top: 0.5rem;
-  }
-}
-
-@media (max-width: 760px) {
-  .home-console {
-    grid-template-columns: 1fr;
   }
 }
 
@@ -2047,31 +1951,6 @@ html[data-theme="dark"] .home-console-card.card {
     min-height: 44px;
   }
 
-  .home-drive {
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem 0.55rem;
-  }
-
-  .home-drive-copy {
-    flex: 1 1 9rem;
-  }
-
-  .home-drive-status {
-    margin-left: auto;
-  }
-
-  .home-drive-actions {
-    flex: 1 1 100%;
-    justify-content: stretch;
-  }
-
-  .home-drive-actions .btn {
-    flex: 1 1 0;
-    min-height: 40px;
-    padding: 0.35rem 0.7rem;
-  }
-
   .login-panel .input-group {
     flex-direction: column;
     flex-wrap: nowrap;
@@ -2094,13 +1973,7 @@ html[data-theme="dark"] .home-console-card.card {
     letter-spacing: 0.01em;
   }
 
-  .jobs-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  .jobs-filters .btn,
+  .jobs-filters .jobs-filter-btn,
   .jobs-page .job-row-actions .btn {
     min-height: 40px;
     padding: 0.35rem 0.7rem;

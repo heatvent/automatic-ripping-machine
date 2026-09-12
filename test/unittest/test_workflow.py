@@ -66,9 +66,11 @@ class TestJobWorkflowStatus(unittest.TestCase):
 
     def test_music_tools(self):
         job = SimpleNamespace(status="info", disctype="music", video_type="music", config=None)
-        self.assertEqual(job_workflow_status(job), "MusicBrainz")
+        self.assertEqual(job_workflow_status(job), "Identifying")
+        job.status = "active"
+        self.assertEqual(job_workflow_status(job), "Identifying")
         job.status = "ripping"
-        self.assertEqual(job_workflow_status(job), "abcde")
+        self.assertEqual(job_workflow_status(job), "Ripping")
 
     def test_finished_labels_unchanged(self):
         job = SimpleNamespace(status="success", disctype="dvd", video_type="movie", config=None)

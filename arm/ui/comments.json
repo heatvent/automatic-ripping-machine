@@ -25,7 +25,7 @@
   "MAXLENGTH": "# Ignore titles longer than this length.\n# Unit: seconds. Use 99999 for no practical maximum.",
   "MANUAL_WAIT": "# Pause after identification so you can change the title in the UI.\n# Options: Yes or No.\n# Yes only waits when the drive is in Manual mode.\n# Auto-mode drives skip this wait even if this is Yes.\n# Wait length is Manual Wait Time seconds.",
   "MANUAL_WAIT_TIME": "# How long to wait for a manual title change when Wait for Manual Title applies.\n# Unit: seconds.\n# Also used as a delay between MakeMKV info calls when Max Concurrent Rips is not 0.",
-  "DATE_FORMAT": "# Python strftime pattern for dates in ARM and the UI.\n# Example: %m-%d-%Y %H:%M:%S",
+  "DATE_FORMAT": "# Python strftime pattern for dates on Home, History, logs, and Settings.\n# Not the OS locale. Example: %m-%d-%Y %H:%M:%S  (US) or %d-%m-%Y %H:%M:%S (day first).\n# Common tokens: %Y year, %m month, %d day, %H 24h, %I 12h, %M minute, %S second, %p AM/PM.",
   "ALLOW_DUPLICATES": "# Allow ripping the same disc title more than once.\n# Options: Yes or No.\n# No: ARM exits if it recognizes the same movie already ripped.\n# Yes is recommended for TV series discs that share a title.",
   "MAX_CONCURRENT_TRANSCODES": "# How many HandBrake or FFmpeg transcodes may run at once.\n# 0 means no limit.\n# Use a small number if your GPU encode slots or CPU cannot keep up.",
   "MAX_CONCURRENT_MAKEMKVINFO": "# How many discs ARM may identify at once (makemkvcon info).\n# This is the Max Concurrent Rips limit.\n# 0 means no limit.\n# Set to 1 if info calls crash backup or MKV rips. When this is not 0, ARM also waits Manual Wait Time seconds after each info call.",

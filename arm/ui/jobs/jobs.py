@@ -11,6 +11,7 @@ from flask import render_template, request, Blueprint, flash, redirect, url_for,
 from werkzeug.routing import ValidationError
 
 import arm.ui.utils as ui_utils
+from arm.ripper import music_brainz
 from arm.title_format import clean_for_filename
 from arm.ui import app, db, constants, json_api
 from arm.models.job import Job, JobState
@@ -29,6 +30,22 @@ def _is_music_job(job):
     Type can live in video_type and/or disctype; older rows often have only one.
     """
     return (job.video_type or "").lower() == "music" or (job.disctype or "").lower() == "music"
+
+
+def _search_title(job):
+    """Prefill Title Search, but not with ARM's unidentified placeholders."""
+    title = str(getattr(job, "title", None) or "").strip()
+    if title.lower() in ("", "not identified", "none", "null", "title unknown"):
+        return ""
+    return title
+
+
+def _search_year(job):
+    """Prefill year, but not SQLAlchemy's stringified None."""
+    year = str(getattr(job, "year", None) or "").strip()
+    if year.lower() in ("", "none", "null"):
+        return ""
+    return year
 
 
 def format_track_length(length, is_music=False):
@@ -244,7 +261,8 @@ def jobdetail():
                            pipeline=pipeline,
                            format_track_length=format_track_length,
                            manual_edit=manual_edit,
-                           form=track_form)
+                           form=track_form,
+                           date_format=cfg.arm_config['DATE_FORMAT'])
 
 
 @route_jobs.route('/jobdetailload', methods=['POST'])
@@ -292,12 +310,15 @@ def title_search():
     """
     job_id = request.args.get('job_id')
     job = Job.query.get(job_id)
-    form = TitleSearchForm(request.args)
-    if form.validate():
+    submitted = bool(request.args.get("save") or request.args.get("title"))
+    form = TitleSearchForm(request.args) if submitted else TitleSearchForm()
+    if submitted and form.validate():
         flash(f'Search for {request.args.get("title")}, year={request.args.get("year")}', 'success')
         return redirect(url_for('route_jobs.list_titles', title=request.args.get("title"),
                                 year=request.args.get("year"), job_id=job_id))
-    return render_template('titlesearch.html', title='Update Title', form=form, job=job)
+    return render_template('titlesearch.html', title='Update Title', form=form, job=job,
+                           search_title=_search_title(job), search_year=_search_year(job),
+                           is_music=_is_music_job(job))
 
 
 @route_jobs.route('/customTitle')
@@ -320,7 +341,9 @@ def customtitle():
         ui_utils.database_updater(args, job)
         flash(f'Custom title changed. Title={job.title}, Year={job.year}.', "success")
         return redirect(url_for('home'))
-    return render_template('customTitle.html', title='Change Title', form=form, job=job)
+    return render_template('customTitle.html', title='Change Title', form=form, job=job,
+                           is_music=_is_music_job(job), search_title=_search_title(job),
+                           search_year=_search_year(job))
 
 
 @route_jobs.route('/gettitle')
@@ -343,7 +366,16 @@ def gettitle():
         app.logger.debug("gettitle - no job supplied")
         flash(constants.NO_JOB, "danger")
         raise ValidationError(constants.NO_JOB)
-    dvd_info = ui_utils.metadata_selector("get_details", None, None, imdb_id)
+    job = Job.query.get(job_id)
+    if music_brainz.is_release_mbid(imdb_id):
+        dvd_info = music_brainz.release_card_for_ui(
+            imdb_id, getattr(job, "arm_version", None) or "unknown"
+        )
+        if not dvd_info:
+            flash("MusicBrainz release not found", "danger")
+            return redirect(url_for("route_jobs.title_search", job_id=job_id))
+    else:
+        dvd_info = ui_utils.metadata_selector("get_details", None, None, imdb_id)
     return render_template('showtitle.html', results=dvd_info, job_id=job_id)
 
 
@@ -383,8 +415,15 @@ def updatetitle():
     app.logger.debug(f"New Poster: {request.args.get('poster')}")
 
     job.year = job.year_manual = request.args.get('year')
-    job.video_type = job.video_type_manual = request.args.get('type')
-    job.imdb_id = job.imdb_id_manual = request.args.get('imdbID')
+    new_type = request.args.get('type')
+    new_id = request.args.get('imdbID')
+    if _is_music_job(job) or str(new_type or "").lower() == "music":
+        job.video_type = job.video_type_manual = "Music"
+        job.crc_id = new_id
+        job.imdb_id = job.imdb_id_manual = None
+    else:
+        job.video_type = job.video_type_manual = new_type
+        job.imdb_id = job.imdb_id_manual = new_id
     job.poster_url = job.poster_url_manual = request.args.get('poster')
 
     job.hasnicetitle = True
@@ -424,18 +463,29 @@ def list_titles():
         raise ValidationError
     job = Job.query.get(job_id)
     form = TitleSearchForm(obj=job)
-    search_results = ui_utils.metadata_selector("search", title, year)
-    if search_results is None or 'Error' in search_results or (
-            'Search' in search_results and len(search_results['Search']) < 1):
-        app.logger.debug("No results found. Trying without year")
-        flash(f"No search results found for {title} ({year})<br/> Trying without year", 'danger')
-        search_results = ui_utils.metadata_selector("search", title, "")
+    if _is_music_job(job):
+        search_results = music_brainz.search_releases_for_ui(
+            title, year, getattr(job, "arm_version", None) or "unknown"
+        )
+        if not (search_results.get("Search") or []) and year:
+            app.logger.debug("No MusicBrainz results with year. Trying without year")
+            flash(f"No search results found for {title} ({year})<br/> Trying without year", 'danger')
+            search_results = music_brainz.search_releases_for_ui(
+                title, "", getattr(job, "arm_version", None) or "unknown"
+            )
+    else:
+        search_results = ui_utils.metadata_selector("search", title, year)
+        if search_results is None or 'Error' in search_results or (
+                'Search' in search_results and len(search_results['Search']) < 1):
+            app.logger.debug("No results found. Trying without year")
+            flash(f"No search results found for {title} ({year})<br/> Trying without year", 'danger')
+            search_results = ui_utils.metadata_selector("search", title, "")
 
     if search_results is None or 'Error' in search_results or (
             'Search' in search_results and len(search_results['Search']) < 1):
         flash(f"No search results found for {title}", 'danger')
-    return render_template('list_titles.html', results=search_results, job_id=job_id,
-                           form=form, title=title, year=year)
+    return render_template('list_titles.html', results=search_results or {"Search": []}, job_id=job_id,
+                           form=form, title=title, year=year, is_music=_is_music_job(job))
 
 
 @route_jobs.route('/json', methods=['GET', 'POST'])

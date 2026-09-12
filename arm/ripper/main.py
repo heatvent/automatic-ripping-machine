@@ -132,8 +132,8 @@ def main():
 
     # Type: Music
     elif job.disctype == "music":
-        # Identify once; get_disc_type / logfile setup may already have queried MusicBrainz.
-        if not job.hasnicetitle:
+        # Identify once; logfile setup may already have queried MusicBrainz.
+        if not job.hasnicetitle and not job.title:
             music_brainz.main(job)
         if utils.rip_music(job, log_file):
             # abcde is done with the disc; free the tray before notify/Emby work.
@@ -237,6 +237,7 @@ def setup():
 
     # Setup logging (audio CDs may query MusicBrainz here)
     log_file = logger.setup_job_log(job)
+    db.session.commit()
 
     logging.info(f"************* Starting ARM processing at {datetime.datetime.now()} *************")
 

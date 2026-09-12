@@ -37,9 +37,9 @@
                    placeholder="Search titles" autocomplete="off">
         </div>
         <div class="col-md-7 mb-2 text-md-right jobs-filters">
-            <button id="save-get-all" type="button" class="btn btn-sm btn-secondary">All</button>
-            <button id="save-get-success" type="button" class="btn btn-sm btn-success">Successful</button>
-            <button id="save-get-failed" type="button" class="btn btn-sm btn-danger">Failed</button>
+            <button id="save-get-all" type="button" class="jobs-filter-btn status-badge">All</button>
+            <button id="save-get-success" type="button" class="jobs-filter-btn status-badge status-success">Successful</button>
+            <button id="save-get-failed" type="button" class="jobs-filter-btn status-badge status-fail">Failed</button>
         </div>
     </div>
 
@@ -72,14 +72,16 @@
                                         {% set is_music = job.video_type == 'Music' or job.disctype == 'music' %}
                                         <span class="job-cover{% if is_music %} job-cover-music{% endif %}">
                                         {% if job.poster_url and job.poster_url not in ['None', 'N/A', 'null'] %}
-                                            <img src="{{ job.poster_url }}" alt="" loading="lazy">
+                                            <img src="{{ job.poster_url }}" alt="" loading="lazy" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/music.png' if is_music else 'img/none.png') }}'">
+                                        {% elif is_music and job.crc_id and job.crc_id.count('-') == 4 %}
+                                            <img src="https://coverartarchive.org/release/{{ job.crc_id }}/front-500" alt="" loading="lazy" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/music.png') }}'">
                                         {% elif is_music %}
                                             <img src="{{ url_for('static', filename='img/music.png') }}" alt="" loading="lazy">
                                         {% else %}
                                             <img src="{{ url_for('static', filename='img/none.png') }}" alt="" loading="lazy">
                                         {% endif %}
                                         </span>
-                                        <span>{{ job.title|truncate(50, True) if job.title is not none else 'Title unknown' }}</span>
+                                        <span>{{ job.title|truncate(50, True) if job.title else 'Title unknown' }}</span>
                                     </a>
                                 </th>
                                 <td data-label="Started">{{ job.start_time.strftime(date_format) if job.start_time is not none }}</td>

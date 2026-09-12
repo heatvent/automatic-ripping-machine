@@ -12,6 +12,7 @@ from collections import deque
 from pathlib import Path
 import datetime
 import psutil
+from sqlalchemy import or_
 from flask import request
 from time import time, strftime, gmtime, sleep
 
@@ -20,7 +21,6 @@ from arm.config.makemkv_select import (
     find_similar_movie_titles,
     format_hms,
 )
-from arm.config.path_health import media_path_health
 import arm.config.config as cfg
 from arm.models.config import Config
 from arm.models.job import Job, JobState, JOB_STATUS_FINISHED
@@ -29,35 +29,8 @@ from arm.ui import app, db
 from arm.ui.forms import ChangeParamsForm
 from arm.ui.utils import job_id_validator, database_updater, authenticated_state
 from arm.ui.settings import DriveUtils as drive_utils # noqa E402
-from arm.ui.workflow import job_workflow_status, movie_pipeline, music_pipeline
-
-
-def drive_status_payload():
-    """Compact drive tray state for the Home idle panel."""
-    rows = []
-    try:
-        drive_utils.update_job_status()
-        drives = drive_utils.get_drives()
-        drive_utils.update_tray_status(drives)
-        for drive in drives:
-            if drive.open:
-                tray = "open"
-            elif drive.stale:
-                tray = "unavailable"
-            elif drive.processing:
-                tray = "busy"
-            else:
-                tray = "closed"
-            rows.append({
-                "drive_id": drive.drive_id,
-                "name": drive.name or drive.mount or "Drive",
-                "mount": drive.mount or "",
-                "tray": tray,
-                "mode": drive.drive_mode or "auto",
-            })
-    except Exception as err:  # noqa: BLE001
-        app.logger.debug("drive_status_payload: %s", err)
-    return rows
+from arm.ripper import music_brainz
+from arm.ui.workflow import job_workflow_status
 
 
 def _job_minlength(job):
@@ -146,7 +119,10 @@ def get_x_jobs(job_status):
     """
     success = False
     if job_status == "joblist":
-        jobs = db.session.query(Job).filter(~Job.finished).all()
+        finished_values = [js.value for js in JOB_STATUS_FINISHED]
+        jobs = db.session.query(Job).filter(
+            or_(Job.status.is_(None), ~Job.status.in_(finished_values))
+        ).all()
     elif JobState(job_status) in JOB_STATUS_FINISHED:
         jobs = Job.query.filter_by(status=job_status)
     else:
@@ -156,8 +132,11 @@ def get_x_jobs(job_status):
     i = 0
     for j in jobs:
         job_results[i] = {}
-        job_log = os.path.join(cfg.arm_config['LOGPATH'], str(j.logfile))
-        process_logfile(job_log, j, job_results[i])
+        try:
+            job_log = os.path.join(cfg.arm_config['LOGPATH'], str(j.logfile or ""))
+            process_logfile(job_log, j, job_results[i])
+        except Exception as err:  # noqa: BLE001
+            app.logger.debug("process_logfile failed for job %s: %s", j.job_id, err)
         try:
             job_results[i]['config'] = j.config.get_d()
         except AttributeError:
@@ -171,6 +150,12 @@ def get_x_jobs(job_status):
                 text = "" if value in (None, "None", "null") else str(value)
                 job_results[i][str(key)] = text
         job_results[i]["tool_status"] = job_workflow_status(j)
+        if j.start_time:
+            job_results[i]["start_display"] = format_job_start(j.start_time)
+        if not job_results[i].get("poster_url"):
+            cover = music_brainz.cover_url_for_release(job_results[i].get("crc_id"))
+            if cover:
+                job_results[i]["poster_url"] = cover
         if j.status == JobState.PLAYLIST_WAIT.value:
             job_results[i]["playlist_picks"] = playlist_picks_for_job(j)
         i += 1
@@ -186,14 +171,18 @@ def get_x_jobs(job_status):
                "results": job_results,
                "arm_name": cfg.arm_config['ARM_NAME'],
                "authenticated": authenticated}
-    if job_status == "joblist":
-        payload["path_health"] = media_path_health(cfg.arm_config)
-        payload["drives"] = drive_status_payload()
-        payload["pipeline"] = {
-            "movie": movie_pipeline(cfg.arm_config),
-            "music": music_pipeline(cfg.arm_config),
-        }
     return payload
+
+
+def format_job_start(start_time):
+    """Format a job start timestamp with Settings → General → Date Format."""
+    if not start_time:
+        return ""
+    pattern = cfg.arm_config.get("DATE_FORMAT") or "%m-%d-%Y %H:%M:%S"
+    try:
+        return start_time.strftime(pattern)
+    except (TypeError, ValueError):
+        return str(start_time)
 
 
 def process_logfile(logfile, job, job_results):
@@ -387,6 +376,44 @@ def process_handbrake_logfile(logfile, job, job_results):
     return job_results
 
 
+_ABCDE_ENCODE_RE = re.compile(r"Encoding track\s+(\d+)\s+of\s+(\d+)", re.I)
+_ABCDE_TAG_RE = re.compile(r"Tagging track\s+(\d+)\s+of\s+(\d+)", re.I)
+_ABCDE_GRAB_RE = re.compile(r"Grabbing track\s+(\d+)", re.I)
+_ABCDE_ENTIRE_RE = re.compile(r"Grabbing entire CD - tracks:\s+(.+)")
+_ABCDE_FINISHED_RE = re.compile(r"^Finished\.?$")
+
+
+def parse_abcde_progress(lines, known_track_count=None):
+    """Read abcde log lines and return (current_track, total_tracks, finished)."""
+    current = None
+    try:
+        total = int(known_track_count or 0) or None
+    except (TypeError, ValueError):
+        total = None
+    finished = False
+    for raw in lines or []:
+        line = str(raw).strip()
+        entire = _ABCDE_ENTIRE_RE.search(line)
+        if entire:
+            names = entire.group(1).split()
+            if names:
+                total = len(names)
+        counted = _ABCDE_ENCODE_RE.search(line) or _ABCDE_TAG_RE.search(line)
+        if counted:
+            current = int(counted.group(1))
+            total = int(counted.group(2))
+            continue
+        grab = _ABCDE_GRAB_RE.search(line)
+        if grab:
+            current = int(grab.group(1))
+            continue
+        if _ABCDE_FINISHED_RE.match(line):
+            finished = True
+    if finished and total:
+        current = total
+    return current, total, finished
+
+
 def process_audio_logfile(logfile, job, job_results):
     """
     Process audio disc logs to show current ripping tracks
@@ -395,38 +422,73 @@ def process_audio_logfile(logfile, job, job_results):
     :param job_results:
     :return:
     """
-    # \((track[^[]+)(?!track)
-    line = read_all_log_lines(os.path.join(cfg.arm_config["LOGPATH"], logfile))
-    for one_line in line:
-        job_stage_index = re.search(r"\(track([^[]+)", str(one_line))
-        if job_stage_index:
-            try:
-                current_index = f"Track: {job_stage_index.group(1)}/{job.no_of_titles}"
-                job.stage = job_results['stage'] = current_index
-                job.eta = calc_process_time(job.start_time, job_stage_index.group(1), job.no_of_titles)
-                job.progress = round(percentage(job_stage_index.group(1), job.no_of_titles + 1))
-                job.progress_round = round(job.progress)
-            except Exception as error:
-                app.logger.debug("Error processing abcde logfile. Error dump"
-                                 f"-  {error}", exc_info=True)
-                job.stage = "Unknown"
-                job.eta = "Unknown"
-                job.progress = job.progress_round = 0
+    if not logfile:
+        return job_results
+    lines = read_all_log_lines(os.path.join(cfg.arm_config["LOGPATH"], logfile))
+    try:
+        current, total, finished = parse_abcde_progress(lines, job.no_of_titles)
+        if total and not job.no_of_titles:
+            job.no_of_titles = total
+        if finished and total:
+            job.stage = f"Track {total}/{total}"
+            job.progress = 100
+            job.eta = "0:00:00"
+        elif current and total:
+            job.stage = f"Track {current}/{total}"
+            job.progress = round(percentage(current, total))
+            job.eta = calc_process_time(job.start_time, current, total)
+        elif current:
+            job.stage = f"Track {current}"
+            job.progress = 0
+            job.eta = "Unknown"
+        else:
+            job.stage = "Starting"
+            job.progress = 0
+            job.eta = "Unknown"
+        job.progress_round = int(job.progress or 0)
+        job_results["stage"] = job.stage
+        job_results["progress"] = job.progress
+        job_results["progress_round"] = job.progress_round
+        job_results["eta"] = job.eta
+    except Exception as error:  # noqa: BLE001
+        app.logger.debug("Error processing abcde logfile. Error dump"
+                         f"-  {error}", exc_info=True)
+        job.stage = "Unknown"
+        job.eta = "Unknown"
+        job.progress = job.progress_round = 0
     return job_results
 
 
+def _format_eta_hms(seconds):
+    seconds = max(0, int(seconds))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    return f"{minutes}m{secs:02d}s"
+
+
 def calc_process_time(starttime, cur_iter, max_iter):
-    """Modified from stackoverflow
-    Get a rough estimate of ETA, return formatted String"""
+    """Rough ETA from how far through a known track count we are."""
     try:
-        time_elapsed = datetime.datetime.now() - starttime
-        time_estimated = (time_elapsed.seconds / int(cur_iter)) * int(max_iter)
-        finish_time = (starttime + datetime.timedelta(seconds=int(time_estimated)))
-        test = finish_time - datetime.datetime.now()
-    except TypeError:
-        app.logger.error("Failed to calculate processing time - Resetting to now, time wont be accurate!")
-        test = time_estimated = time_elapsed = finish_time = datetime.datetime.now()
-    return f"{str(test).split('.', maxsplit=1)[0]} - @{finish_time.strftime('%H:%M:%S')}"
+        current = int(cur_iter)
+        total = int(max_iter)
+        if current <= 0 or total <= 0 or starttime is None:
+            return "Unknown"
+        if current > total:
+            current = total
+        elapsed = (datetime.datetime.now() - starttime).total_seconds()
+        if elapsed < 0:
+            return "Unknown"
+        estimated_total = (elapsed / current) * total
+        remaining = estimated_total - elapsed
+        if remaining < 0:
+            remaining = 0
+        finish = datetime.datetime.now() + datetime.timedelta(seconds=int(remaining))
+        return f"{_format_eta_hms(remaining)} ({finish.strftime('%H:%M:%S')})"
+    except (TypeError, ValueError, OverflowError, OSError):
+        app.logger.debug("Failed to calculate audio ETA", exc_info=True)
+        return "Unknown"
 
 
 def read_log_line(log_file: os.PathLike):
@@ -623,6 +685,10 @@ def abandon_job(job_id):
         app.logger.debug("Job ERROR: %s couldn't be abandoned. Reverting db changes - %s",
                          job.pid, json_return["Error"])
         return json_return
+    from arm.ripper.utils import clear_abcde_work_dirs, stop_stray_abcde
+    stop_stray_abcde(job.devpath)
+    if str(job.disctype or "").lower() == "music" or str(job.video_type or "").lower() == "music":
+        clear_abcde_work_dirs()
     job.eject()
     json_return['success'] = True
     db.session.commit()
@@ -640,18 +706,33 @@ def terminate_process(pid):
         app.logger.warning(message)
         return
     try:
-        job_process = psutil.Process(pid)
-        job_process.terminate()  # or job_process.kill()
+        parent = psutil.Process(pid)
     except psutil.NoSuchProcess:
         message = f"Process id {pid} was not found. Job has already been terminated."
         app.logger.warning(message)
-        # No raise here. No process is a terminated process.
+        return
     except psutil.AccessDenied as err:
         message = f"Access denied abandoning job: {pid}!"
         app.logger.error(message)
         raise ValueError(message) from err
-    else:
-        app.logger.debug(f"Job with PID {pid} was terminated.")
+    procs = parent.children(recursive=True)
+    procs.append(parent)
+    for proc in procs:
+        try:
+            proc.terminate()
+        except psutil.NoSuchProcess:
+            continue
+        except psutil.AccessDenied as err:
+            message = f"Access denied abandoning job: {pid}!"
+            app.logger.error(message)
+            raise ValueError(message) from err
+    _gone, alive = psutil.wait_procs(procs, timeout=5)
+    for proc in alive:
+        try:
+            proc.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    app.logger.debug("Job with PID %s was terminated (%s process(es)).", pid, len(procs))
 
 
 def change_job_params(config_id):

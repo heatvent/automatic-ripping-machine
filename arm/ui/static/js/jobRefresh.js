@@ -288,114 +288,13 @@ function refreshJobsComplete() {
     updateHomeEmptyState();
 }
 
-function escapeHomeText(value) {
-    return String(value == null ? "" : value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
 function updateHomeEmptyState() {
-    const heading = document.getElementById("homeHeading");
     const joblist = document.getElementById("joblist");
-    const hint = document.getElementById("homeIdleHint");
-    const pipelineEl = document.getElementById("homePipeline");
     if (!joblist) {
         return;
     }
     const hasJobs = joblist.querySelectorAll(".col-md-4").length > 0;
-    if (heading) {
-        heading.hidden = hasJobs;
-    }
-    if (hint) {
-        hint.hidden = hasJobs;
-    }
-    if (pipelineEl) {
-        pipelineEl.hidden = hasJobs;
-    }
     joblist.hidden = !hasJobs;
-}
-
-function homeDriveTrayButtons(drive) {
-    const driveId = drive && drive.drive_id;
-    const canTray = Boolean(drive && drive.mount) && driveId != null && driveId !== "";
-    if (canTray) {
-        const id = encodeURIComponent(String(driveId));
-        return `<div class="home-drive-actions">` +
-            `<a href="drive/open/${id}?next=/" class="btn btn-secondary btn-sm text-nowrap">Open</a>` +
-            `<a href="drive/close/${id}?next=/" class="btn btn-secondary btn-sm text-nowrap">Close</a>` +
-            `</div>`;
-    }
-    return `<div class="home-drive-actions">` +
-        `<button type="button" class="btn btn-secondary btn-sm text-nowrap" disabled title="Drive has no mount path">Open</button>` +
-        `<button type="button" class="btn btn-secondary btn-sm text-nowrap" disabled title="Drive has no mount path">Close</button>` +
-        `</div>`;
-}
-
-function renderHomeConsole(data) {
-    const pathsEl = document.getElementById("homePathHealth");
-    const drivesEl = document.getElementById("homeDrives");
-    const warnEl = document.getElementById("homePathWarn");
-    if (!data) {
-        return;
-    }
-    const pipelineEl = document.getElementById("homePipeline");
-    if (pipelineEl && data.pipeline) {
-        const movie = data.pipeline.movie && data.pipeline.movie.sentence;
-        const music = data.pipeline.music && data.pipeline.music.sentence;
-        const parts = [];
-        if (movie) {
-            parts.push("<p><strong>Movie / TV disc:</strong> " + escapeHomeText(movie) + "</p>");
-        }
-        if (music) {
-            parts.push("<p><strong>Music CD:</strong> " + escapeHomeText(music) + "</p>");
-        }
-        pipelineEl.innerHTML = parts.join("");
-    }
-    const paths = Array.isArray(data.path_health) ? data.path_health : [];
-    if (pathsEl) {
-        if (!paths.length) {
-            pathsEl.innerHTML = "<div class=\"home-console-empty\">No folder paths configured.</div>";
-        } else {
-            pathsEl.innerHTML = paths.map(function (row) {
-                const ok = row.ok ? "is-ok" : "is-bad";
-                const detail = row.ok
-                    ? (row.free_gb != null ? `${row.free_gb} GB free` : "writable")
-                    : (row.error || "not writable");
-                const path = row.path ? `<div class="home-console-meta">${escapeHomeText(row.path)}</div>` : "";
-                return `<div class="path-health-row"><span class="path-health-dot ${ok}"></span>` +
-                    `<div class="path-health-copy"><strong>${escapeHomeText(row.label)}</strong>` +
-                    `<span class="path-health-detail">${escapeHomeText(detail)}</span>${path}</div></div>`;
-            }).join("");
-        }
-    }
-    const bad = paths.filter(function (row) { return !row.ok; });
-    if (warnEl) {
-        if (bad.length) {
-            warnEl.hidden = false;
-            warnEl.textContent = "Fix these folders before inserting a disc: " +
-                bad.map(function (row) { return row.label + " (" + (row.error || "not writable") + ")"; }).join(" · ");
-        } else {
-            warnEl.hidden = true;
-            warnEl.textContent = "";
-        }
-    }
-    const drives = Array.isArray(data.drives) ? data.drives : [];
-    if (drivesEl) {
-        if (!drives.length) {
-            drivesEl.innerHTML = "<div class=\"home-console-empty\">No optical drives found.</div>";
-        } else {
-            drivesEl.innerHTML = drives.map(function (drive) {
-                const tray = drive.tray || "unknown";
-                const mode = drive.mode || "auto";
-                const mount = drive.mount ? `<div class="home-console-meta">${escapeHomeText(drive.mount)}</div>` : "";
-                return `<div class="home-drive"><div class="home-drive-copy"><strong>${escapeHomeText(drive.name)}</strong>` +
-                    `${mount}</div><div class="home-drive-status"><span class="home-tray is-${escapeHomeText(tray)}">${escapeHomeText(tray)}</span>` +
-                    `<span class="home-console-meta">${escapeHomeText(mode)}</span></div>${homeDriveTrayButtons(drive)}</div>`;
-            }).join("");
-        }
-    }
 }
 
 /**
@@ -428,7 +327,6 @@ function checkActiveJobs(data, serverIndex) {
  * @returns {*}
  */
 function refreshJobsSuccess(data, serverIndex, serverUrl, serverCount) {
-    renderHomeConsole(data);
     checkActiveJobs(data, serverIndex);
     $.each(data.results, function (_index, job) {
         job.job_id = `${serverIndex}_${job.job_id}`;

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Collection of utility functions"""
-import datetime
 import os
 import logging
 import subprocess
@@ -454,6 +453,96 @@ def abcde_output_dir():
     return os.path.expanduser(path) if path else ""
 
 
+def _is_abcde_workdir(path):
+    """True for abcde session folders like abcde.a00a3c0a (CDDB disc id)."""
+    name = Path(path).name
+    if not name.startswith("abcde."):
+        return False
+    suffix = name[6:]
+    return bool(suffix) and all(char in "0123456789abcdefABCDEF" for char in suffix)
+
+
+def abcde_work_dirs(base=None):
+    """Temporary abcde session folders in the ARM home (and TMPDIR)."""
+    if base is not None:
+        roots = [Path(base)]
+    else:
+        roots = [Path.home()]
+        tmp = Path(os.environ.get("TMPDIR") or "/tmp")
+        if tmp not in roots:
+            roots.append(tmp)
+    found = []
+    for root in roots:
+        try:
+            entries = root.iterdir()
+        except OSError:
+            continue
+        for path in entries:
+            if path.is_dir() and _is_abcde_workdir(path):
+                found.append(path)
+    return found
+
+
+def _path_in_process_cmd(path, cmdline):
+    text = " ".join(cmdline or [])
+    return str(path) in text
+
+
+def abcde_workdir_in_use(path):
+    """True when a running process still has this abcde session folder open."""
+    target = str(path)
+    for proc in psutil.process_iter(["cmdline"]):
+        try:
+            if _path_in_process_cmd(target, proc.info.get("cmdline")):
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return False
+
+
+def stop_stray_abcde(devpath):
+    """Kill abcde/cdparanoia left on this drive after an abandoned job."""
+    if not devpath:
+        return 0
+    markers = (str(devpath), os.path.basename(str(devpath)))
+    killed = 0
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            cmd = " ".join(proc.info.get("cmdline") or [])
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        if name not in ("abcde", "cdparanoia") and "abcde" not in cmd and "cdparanoia" not in cmd:
+            continue
+        if not any(marker and marker in cmd for marker in markers):
+            continue
+        try:
+            proc.kill()
+            killed += 1
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    if killed:
+        logging.info("Stopped %s leftover abcde/cdparanoia process(es) on %s", killed, devpath)
+    return killed
+
+
+def clear_abcde_work_dirs(base=None):
+    """Delete leftover abcde session folders so the next CD rip starts at track 1."""
+    removed = []
+    for path in abcde_work_dirs(base):
+        if abcde_workdir_in_use(path):
+            logging.info("Leaving in-use abcde session %s", path)
+            continue
+        try:
+            shutil.rmtree(path)
+            removed.append(str(path))
+        except OSError as error:
+            logging.warning("Could not remove abcde session %s: %s", path, error)
+    if removed:
+        logging.info("Removed leftover abcde session(s): %s", ", ".join(removed))
+    return removed
+
+
 def promote_album_cover(output_dir, max_age_seconds=7200):
     """Copy a freshly ripped abcde cover.jpg next to the tracks.
 
@@ -518,6 +607,10 @@ def rip_music(job, logfile):
     abcfile = cfg.arm_config["ABCDE_CONFIG_FILE"]
     if job.disctype == "music":
         logging.info("Disc identified as music")
+        # Abandoned rips leave abcde.<discid> in $HOME; abcde resumes that
+        # session and skips tracks it already grabbed. Start clean.
+        stop_stray_abcde(job.devpath)
+        clear_abcde_work_dirs()
         cmd = abcde_rip_command(
             job.devpath,
             logfile,

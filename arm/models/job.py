@@ -120,7 +120,7 @@ STATUS_LABELS = {
 def status_label(status, job=None):
     """Human label for a job or sysinfo status value.
 
-    When a job is passed, name the tool (Identify, MakeMKV, HandBrake, abcde).
+    When a job is passed, name the current step (Identify, MakeMKV, HandBrake, Ripping).
     """
     if job is not None:
         from arm.ui.workflow import job_workflow_status
@@ -184,6 +184,15 @@ def classify_disc_from_udev(props):
             or udev_flag_set(props, "ID_CDROM_MEDIA_CD_RW")):
         return "music", label
     return "unknown", label
+
+
+def audio_track_count_from_udev(props):
+    """Audio track count from udev, if the disc reports one."""
+    try:
+        count = int(props.get("ID_CDROM_MEDIA_TRACK_COUNT_AUDIO"))
+    except (TypeError, ValueError):
+        return None
+    return count if count > 0 else None
 
 
 def serialize_model_value(value):
@@ -305,6 +314,10 @@ class Job(db.Model):
         self.disctype = disc_type
         if label:
             self.label = label
+        if disc_type == "music":
+            tracks = audio_track_count_from_udev(props)
+            if tracks:
+                self.no_of_titles = tracks
 
     def get_pid(self):
         """
@@ -355,11 +368,15 @@ class Job(db.Model):
 
         return - only the logfile - setup_logging() adds the full path
         """
+        self.status = JobState.VIDEO_INFO.value
+        persist_job_session()
         mb_title = music_brainz.main(self)
         if not mb_title:
             self.label = self.title = "not identified"
+            persist_job_session()
             return "music_cd"
         self.label = mb_title
+        persist_job_session()
         return mb_title.replace("/", "_")
 
     def pretty_table(self):
@@ -440,7 +457,10 @@ class Job(db.Model):
 
     @hybrid_property
     def finished(self):
-        return JobState(self.status) in JOB_STATUS_FINISHED
+        try:
+            return JobState(self.status) in JOB_STATUS_FINISHED
+        except (TypeError, ValueError):
+            return False
 
     @finished.expression
     def finished(cls):
@@ -448,11 +468,17 @@ class Job(db.Model):
 
     @property
     def idle(self):
-        return JobState(self.status) == JobState.IDLE
+        try:
+            return JobState(self.status) == JobState.IDLE
+        except (TypeError, ValueError):
+            return False
 
     @property
     def ripping(self):
-        return JobState(self.status) in JOB_STATUS_RIPPING
+        try:
+            return JobState(self.status) in JOB_STATUS_RIPPING
+        except (TypeError, ValueError):
+            return False
 
     @property
     def run_time(self):

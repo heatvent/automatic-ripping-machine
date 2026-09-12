@@ -11,7 +11,7 @@
                     {{ form.hidden_tag() }}
                     <div class="input-group mb-3">
                         <div class="input-group-prepend">
-                            <span class="input-group-text" id="searchtitle">Title</span>
+                            <span class="input-group-text" id="searchtitle">{{ 'Album' if is_music|default(false) else 'Title' }}</span>
                         </div>
                         <input type="text" class="form-control" aria-label="searchtitle" name="title"
                                value="{{ title }}" aria-describedby="searchtitle">
@@ -33,13 +33,13 @@
         <br><br>
 
         <div class="row">
-            {% for res in results["Search"] %}
+            {% for res in (results or {}).get("Search") or [] %}
                 {% if "Type" in res and res["Type"].lower() != "game" %}
                     <div class="col-md-3 text-center">
                         <div class="card text-center">
                             <div class="card-header">
                                 <a href="gettitle?imdbID={{ res["imdbID"] }}&job_id={{ job_id }}">
-                                  <span class="job-cover job-cover-lg"><img src="{{ res["Poster"] }}" alt="Poster image"></span>
+                                  <span class="job-cover job-cover-lg{% if res['Type'].lower() == 'music' %} job-cover-music{% endif %}"><img src="{{ res["Poster"] }}" alt="Poster image" onerror="this.onerror=null;this.src='{{ url_for('static', filename='img/music.png' if (res['Type']|lower) == 'music' else 'img/none.png') }}';"></span>
                                 </a>
                             </div>
                             <div class="card-body"><strong>{{ res["Title"] }}</strong> - {{ res["Type"].capitalize() }}

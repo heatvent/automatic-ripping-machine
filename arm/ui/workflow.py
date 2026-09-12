@@ -90,7 +90,7 @@ def music_pipeline(settings=None):
 
 
 def job_workflow_status(job):
-    """Status label that names the tool currently running."""
+    """Status label for Home/History. Movie jobs name the tool; CD rips use Ripping."""
     if job is None:
         return ""
     status = str(getattr(job, "status", "") or "").lower()
@@ -103,10 +103,10 @@ def job_workflow_status(job):
         use_ffmpeg = bool(getattr(config, "USE_FFMPEG", False))
     encoder = "FFmpeg" if use_ffmpeg else "HandBrake"
     if is_music:
-        if status == "info":
-            return "MusicBrainz"
+        if status in ("info", "active"):
+            return "Identifying"
         if status == "ripping":
-            return "abcde"
+            return "Ripping"
     if status == "info":
         return "Identify"
     if status == "ripping":
