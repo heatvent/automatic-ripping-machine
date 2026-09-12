@@ -10,13 +10,19 @@
     </p>
 
     <h2>Typical Workflow</h2>
+    <p>ARM identifies the disc type first, then follows one of two paths.</p>
+    <h3>Movie (DVD / Blu-ray)</h3>
     <ol>
-        <li>Insert a disc. The tray is claimed and a job appears on <a href="index.html">Home</a>.</li>
-        <li>On an auto-mode drive, ripping starts immediately. Manual-mode drives wait until you confirm.</li>
-        <li>Video discs are identified (title, year, type) using your metadata provider (OMDb or TMDb).</li>
-        <li>MakeMKV (or backup mode) rips the disc. If transcoding is enabled, HandBrake or FFmpeg runs after the rip.</li>
-        <li>When this install has skip-transcode enabled, the MakeMKV output is the finished file and the tray is freed sooner.</li>
-        <li>The disc ejects. Finished rips show as success or fail in History.</li>
+        <li>Identify the title (OMDb or TMDb).</li>
+        <li>Choose which titles to rip (one main title, or titles in the length window).</li>
+        <li>MakeMKV rips those titles to Raw. The tray ejects when MakeMKV finishes.</li>
+        <li>If Skip Transcoding is Yes, ARM copies Raw to Completed.</li>
+        <li>If Skip Transcoding is No, HandBrake (or FFmpeg) transcodes Raw to Transcode, then ARM copies that to Completed.</li>
+    </ol>
+    <h3>Music (audio CD)</h3>
+    <ol>
+        <li>Identify the album with MusicBrainz.</li>
+        <li>abcde rips every track into Completed.</li>
     </ol>
 
     <h2>Pages</h2>
@@ -26,7 +32,7 @@
         <dt>History</dt>
         <dd>Past rips in a table. Search, filter successful or failed rips, delete, or open a log. System logs that are not tied to a rip are listed at the bottom of the first page.</dd>
         <dt>Settings</dt>
-        <dd>General (machine name, web server, permissions), System Information (software versions and live hardware stats), Disk Drives, Movie Ripper, CD Ripper for audio discs, Notifications (including Emby and Apprise), and UI refresh interval.</dd>
+        <dd>General (identity, logging, web server, and Home/History UI), Disk Drives, Movie Ripper, CD Ripper, Notifications (when to notify, IFTTT, Pushover, Pushbullet, Apprise, Emby), Maintenance (backup/restore and clearing jobs), and System Information.</dd>
         <dt>Profile</dt>
         <dd>Click your username in the sidebar footer to change the password or log out.</dd>
     </dl>
@@ -43,15 +49,17 @@
 
     <h2>Notifications</h2>
     <p>
-        ARM does not show pop-up toasts in the browser. Job events can still go to Apprise
-        (Discord, email, ntfy, and others) from the Notifications tab in Settings.
+        Home and History already show what is ripping and what finished. The web UI
+        does not keep a separate inbox. Start, stop, and fail can still go to your
+        phone or Discord from the Notifications tab in Settings
+        (Apprise, email, ntfy, and others).
     </p>
 
     <h2>When the UI Asks to Reload</h2>
     <p>
         Most settings apply as soon as you save. A banner appears only if the web process itself must
         restart — for example after changing login or the listen address. In-progress rips are not stopped.
-        Saving UI Settings (refresh interval) only needs a page reload on Home.
+        Saving the Web UI options on the General tab (refresh interval) only needs a page reload on Home.
     </p>
 
     <h2>Send Titles to the ARM DVD Database</h2>

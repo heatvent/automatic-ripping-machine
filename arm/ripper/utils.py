@@ -22,7 +22,6 @@ import arm.config.config as cfg
 from arm.ripper.ProcessHandler import arm_subprocess
 from arm.ui import db  # needs to be imported before models
 from arm.models.job import Job, JobState, job_holds_drive
-from arm.models.notifications import Notifications
 from arm.models.track import Track
 from arm.models.user import User
 from arm.models.system_drives import SystemDrives
@@ -61,12 +60,11 @@ def should_wait_for_manual(job):
 
 
 def notify(job, title: str, body: str):
-    """
-    Send notifications with apprise\n
-    :param job: Current Job
-    :param title: title for notification
-    :param body: body of the notification
-    :return: None
+    """Send outbound alerts (Apprise, IFTTT, Pushover, Pushbullet, bash, JSON).
+
+    This does not write an in-app inbox. Home and History are the on-machine
+    view of jobs; Settings → Notifications only configures these remote sends.
+    Failures are logged and ripping continues.
     """
 
     # Prepend Site Name if configured
@@ -77,10 +75,7 @@ def notify(job, title: str, body: str):
     if cfg.arm_config["NOTIFY_JOBID"] and job is not None:
         title = f"{title} - {job.job_id}"
 
-    # Send to local db
     logging.debug(f"apprise message, title: {title} body: {body}")
-    notification = Notifications(title, body)
-    database_adder(notification)
 
     bash_notify(cfg.arm_config, title, body)
 
@@ -110,22 +105,13 @@ def notify(job, title: str, body: str):
 
 
 def bash_notify(cfg, title, body):
-    # bash notifications use subprocess instead of apprise.
+    """Optional local script from Settings → Notifications (BASH_SCRIPT)."""
     if cfg['BASH_SCRIPT'] != "":
         arm_subprocess(["/usr/bin/env", "bash", cfg['BASH_SCRIPT'], title, body])
 
 
 def notify_entry(job):
-    """
-    Notify On Entry\n
-    :param job:
-    :return: None
-    """
-    # TODO make this better or merge with notify/class
-    notification = Notifications(f"New Job: {job.job_id} has started. Disctype: {job.disctype}",
-                                 f"New job has started to rip - {job.label},"
-                                 f"{job.disctype} at {datetime.datetime.now()}")
-    database_adder(notification)
+    """Outbound alert when a disc is identified, before ripping starts."""
     if job.disctype in ["dvd", "bluray"]:
         if cfg.arm_config["UI_BASE_URL"] == "":
             display_address = (f"http://{check_ip()}:{job.config.WEBSERVER_PORT}")

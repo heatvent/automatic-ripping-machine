@@ -117,8 +117,14 @@ STATUS_LABELS = {
 }
 
 
-def status_label(status):
-    """Human Title Case label for a job or sysinfo status value."""
+def status_label(status, job=None):
+    """Human label for a job or sysinfo status value.
+
+    When a job is passed, name the tool (Identify, MakeMKV, HandBrake, abcde).
+    """
+    if job is not None:
+        from arm.ui.workflow import job_workflow_status
+        return job_workflow_status(job)
     if status is None:
         return ""
     text = str(status)

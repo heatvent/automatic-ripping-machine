@@ -13,71 +13,55 @@
             background-size: cover;
             background-image: url({{ jobs.background }});
         }
-        div.metacritic {
-            background-color: #fc3;
-            border-radius: 50% !important;
-        }
-        div.internet-movie-database {
-            background: url("https://m.media-amazon.com/images/S/sash/7n0KRCHny73GkBG.png") no-repeat 0 -80px;
-            padding-left: 20px;
-            font-weight: bolder;
-        }
-        div.rotten-tomatoes {
-            background: url("https://www.rottentomatoes.com/assets/pizza-pie/images/icons/tomatometer/tomatometer-fresh.149b5e8adc3.svg") no-repeat 0 0;
-            padding-left: 23px;
-            font-weight: bolder;
-            background-size: 33% 100%;
-            background-position: left;
-        }
-        div.rotten-tomatoes-rotten {
-            background: url("https://www.rottentomatoes.com/assets/pizza-pie/images/icons/tomatometer/tomatometer-rotten.f1ef4f02ce3.svg") no-repeat 0 0;
-            padding-left: 23px;
-            font-weight: bolder;
-            background-size: 33% 100%;
-            background-position: left;
-        }
-        div.ratings { margin-top: -50px !important; }
     </style>
     <div class="container">
         <div class="row">
             <div class="col-sm-12">
                 <div class="table-responsive">
-                    <div class="card{{ ' text-center' if jobs.background is none  else '' }}">
+                    <div class="card job-detail">
                         <div class="card-header text-center">
-                            <h4>{{ jobs.title }} - {{ (jobs.video_type or '')|capitalize }} ({{ jobs.year }})</h4>
-                            <div class="ratings float-right mt-0">
-                                {% if s and s['Ratings'] %}
-                                {% for ratings in s['Ratings'] %}
-                                    <div class="
-                                            {{ ratings['Source']|replace(' ', '-')|lower }}{{ '-rotten' if ratings['Source'] == 'Rotten Tomatoes' and ratings['Value']|replace('%','')| int < 60 else '' }}">
-                                        {{ ratings['Value'].split('/')[0] if '/' in ratings['Value'] else ratings['Value'] }}
-                                    </div>
-                                {% endfor %}
+                            <h4>{{ jobs.title }} - {{ ('Music' if is_music else (jobs.video_type or ''))|capitalize }} ({{ jobs.year }})</h4>
+                        </div>
+                        <div class="card-header background-poster job-detail-art">
+                            <div class="job-detail-poster">
+                            {% if jobs.poster_url %}
+                                {# Music uses contain so non-square CAA covers are not cropped. #}
+                                <span class="job-cover job-cover-xl{% if is_music %} job-cover-music{% endif %}"><img src="{{ jobs.poster_url }}" alt=""></span>
+                            {% elif is_music %}
+                                <span class="job-cover job-cover-xl job-cover-music"><img src="static/img/music.png" alt=""></span>
+                            {% else %}
+                                <span class="job-cover job-cover-xl"><img src="static/img/none.png" alt=""></span>
+                            {% endif %}
+                            </div>
+                            <div class="job-detail-actions">
+                                {% if not is_music %}
+                                <div class="btn-group job-actions" role="group">
+                                    <a href="titlesearch?job_id={{ jobs.job_id }}" class="btn btn-primary">Title Search</a>
+                                    <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom Title</a>
+                                </div>
+                                <p class="small text-muted mt-2 mb-0">Title Search and Custom Title change the saved name and output folder. They do not restart MakeMKV if a rip is already running.</p>
+                                {% else %}
+                                <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom Title</a>
                                 {% endif %}
                             </div>
                         </div>
-                        <div class="card-header background-poster">
-                            {% if jobs.poster_url %}
-                                <a id="posterClick" href="#"><img src="{{ jobs.poster_url }}" width="240px" class="img-thumbnail" alt="Movie Poster"></a>
-                            {% elif jobs.video_type == "Music" %}
-                                <a id="posterClick" href="#"><img src="static/img/music.png" alt="Not found" width="240px" class="img-thumbnail"></a>
-                            {% else %}
-                                <a id="posterClick" href="#"><img src="static/img/none.png" alt="Not found" width="240px" class="img-thumbnail"></a>
-                            {% endif %}
-                            {% if jobs.video_type != "Music" %}
-                                <div class="btn-group float-right mt-2 job-actions" role="group">
-                                    <a href="titlesearch?job_id={{ jobs.job_id }}" class="btn btn-primary">Title Search</a>
-                                    <a href="customTitle?job_id={{ jobs.job_id }}" class="btn btn-primary">Custom Title</a>
-                                    <a id="plot" class="btn btn-primary">Plot</a>
-                                </div>
-                                <p class="small text-muted mt-2 mb-0">Title Search and Custom Title change the saved name and output folder. They do not restart MakeMKV if a rip is already running.</p>
-                            {% endif %}
+                        {% if pipeline %}
+                        <div class="job-plot" role="region" aria-label="How this disc was processed">
+                            <h5>How this disc is processed</h5>
+                            <p class="mb-2">{{ pipeline.sentence }}</p>
+                            <ol class="pipeline-steps mb-0">
+                                {% for step in pipeline.steps %}
+                                <li>{{ step }}</li>
+                                {% endfor %}
+                            </ol>
                         </div>
-                        <div id="plotInfo" class="alert alert-info text-center" style="display: none;" role="alert">
-                            <h4 class="alert-heading">Plot for {{ jobs.title }}</h4>
-                            <hr>
-                            <p class="mb-0">{{ jobs.plot }}</p>
+                        {% endif %}
+                        {% if plot and not is_music %}
+                        <div class="job-plot" role="region" aria-label="Plot">
+                            <h5>Plot</h5>
+                            <p>{{ plot }}</p>
                         </div>
+                        {% endif %}
                         {% if jobs.status == 'waiting_playlist' %}
                         <div class="alert alert-warning mb-0" role="status">Pick a title on Home, or check titles below and click Update. ARM will use the suggested title in five minutes if you do nothing.</div>
                         {% endif %}
@@ -86,7 +70,7 @@
                         {% endif %}
                         <div class="card-body">
                             <dl class="job-summary">
-                                <div><dt>Status</dt><dd>{{ status_badge(jobs.status) }}</dd></div>
+                                <div><dt>Status</dt><dd>{{ status_badge(jobs.status, job=jobs) }}</dd></div>
                                 <div><dt>Device</dt><dd>{{ jobs.devpath }}</dd></div>
                                 <div><dt>Started</dt><dd>{{ jobs.start_time }}</dd></div>
                                 <div><dt>Duration</dt><dd>{{ jobs.job_length or "—" }}</dd></div>
@@ -100,6 +84,12 @@
                                         </span>
                                     {% else %}—{% endif %}
                                 </dd></div>
+                                {% for fact in extra_facts %}
+                                <div>
+                                    <dt>{{ fact.label }}</dt>
+                                    <dd class="text-break">{% if fact.href %}<a href="{{ fact.href }}" target="_blank" rel="noopener">{{ fact.value }}</a>{% else %}{{ fact.value }}{% endif %}</dd>
+                                </div>
+                                {% endfor %}
                             </dl>
                             <p class="mb-3">
                                 <a href="changeparams?config_id={{ jobs.job_id }}" class="btn btn-sm btn-primary">Edit Settings</a>
@@ -112,21 +102,17 @@
                                     <thead class="bg-secondary">
                                     <tr>
                                         <th scope="col">Track #</th>
-                                        {% if jobs.video_type == "Music" %}
+                                        {% if is_music %}
                                             <th scope="col">Track Name</th>
                                         {% endif %}
-                                        <th scope="col">
-                                            <button type="button" id="toggle-time-format" class="btn btn-primary btn-sm" title="Click to toggle time format">
-                                                <span id="time-format-label">seconds</span>
-                                            </button>
-                                        </th>
+                                        <th scope="col">Length</th>
+                                        {% if not is_music %}
                                         <th scope="col">Chapters</th>
                                         <th scope="col">Size</th>
                                         <th scope="col">FPS</th>
                                         <th scope="col">Aspect</th>
                                         <th scope="col">Main</th>
-                                        {% if jobs.video_type != "Music" %}
-                                            <th scope="col">Rip</th>
+                                        <th scope="col">Rip</th>
                                         {% endif %}
                                         <th scope="col">Ripped</th>
                                     </tr>
@@ -135,20 +121,17 @@
                                     {% for track in tracks %}
                                         <tr{% if track.main_feature %} class="table-active"{% endif %}>
                                             <td><strong>{{ track.track_number }}</strong></td>
-                                            {% if jobs.video_type == "Music" %}
+                                            {% if is_music %}
                                                 <td>{{ track.filename }}</td>
                                             {% endif %}
-                                            <td>
-                                                <span class="length-seconds">{{ track.length }}{{ " (Milliseconds)" if jobs.video_type == "Music" else "" }}</span>
-                                                <span class="length-formatted" style="display:none;" data-seconds="{{ track.length }}"></span>
-                                            </td>
+                                            <td>{{ format_track_length(track.length, is_music) }}</td>
+                                            {% if not is_music %}
                                             <td>{{ track.chapters or "—" }}</td>
                                             <td>{% if track.filesize %}{{ (track.filesize / 1048576)|round(1) }} MB{% else %}—{% endif %}</td>
                                             <td>{{ track.fps }}</td>
                                             <td>{{ track.aspect_ratio }}</td>
                                             <td>{{ "Yes" if track.main_feature else "No" }}</td>
-                                            {% if jobs.video_type != "Music" %}
-                                                <td>{{ form.track_ref[loop.index0].checkbox }}{{ form.track_ref[loop.index0].track_ref }}</td>
+                                            <td>{{ form.track_ref[loop.index0].checkbox }}{{ form.track_ref[loop.index0].track_ref }}</td>
                                             {% endif %}
                                             <td>{{ "Yes" if track.ripped else "No" }}</td>
                                         </tr>
@@ -189,12 +172,6 @@
     </div>
     <script type="application/javascript">
         $(function () {
-            $("#plot").click(function () {
-                $("#plotInfo").slideToggle(1000);
-            });
-            $("#posterClick").click(function () {
-                $("#plotInfo").slideToggle(1000);
-            });
             $("#fixPermsBtn").click(function () {
                 const href = $(this).data("href");
                 const msg = $("#fixPermsMsg");
@@ -203,45 +180,6 @@
                     msg.text(data.success ? "Permissions updated" : (data.Error || data.error || "Request failed"));
                 }, "json");
             });
-
-            function secondsToHHMMSS(seconds) {
-                if (!seconds) return "00:00:00";
-                const isMusic = "{{ jobs.video_type }}" === "Music";
-                let secondsValue = parseInt(seconds, 10);
-                if (isMusic) {
-                    secondsValue = Math.round(secondsValue / 1000);
-                }
-                const hours = Math.floor(secondsValue / 3600);
-                const minutes = Math.floor((secondsValue % 3600) / 60);
-                const remainingSeconds = Math.floor(secondsValue % 60);
-                if (hours === 0) {
-                    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-                }
-                return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-            }
-            $('.length-formatted').each(function() {
-                $(this).text(secondsToHHMMSS($(this).data('seconds')));
-            });
-            let showFormatted = false;
-            $('#toggle-time-format').click(function() {
-                showFormatted = !showFormatted;
-                if (showFormatted) {
-                    $('.length-seconds').hide();
-                    $('.length-formatted').show();
-                    $('#time-format-label').text('HH:MM:SS');
-                } else {
-                    $('.length-seconds').show();
-                    $('.length-formatted').hide();
-                    $('#time-format-label').text('seconds');
-                }
-                localStorage.setItem('arm_show_formatted_time', showFormatted);
-            });
-            if (localStorage.getItem('arm_show_formatted_time') === 'true') {
-                showFormatted = true;
-                $('.length-seconds').hide();
-                $('.length-formatted').show();
-                $('#time-format-label').text('HH:MM:SS');
-            }
         });
     </script>
 {% endblock %}

@@ -1,8 +1,4 @@
-"""
-ARM route blueprint for history pages
-Covers
-- history [GET] (redirects to /jobs)
-"""
+"""Old /history URL. The job list now lives at /jobs; keep this redirect."""
 
 from flask_login import login_required  # noqa: F401
 from flask import request, Blueprint, redirect, url_for
@@ -15,5 +11,5 @@ route_history = Blueprint('route_history', __name__,
 @route_history.route('/history')
 @login_required
 def history():
-    """Kept as a bookmark; jobs now live on /jobs."""
+    """Old /history bookmark → History (/jobs)."""
     return redirect(url_for('route_jobs.view_jobs', page=request.args.get('page')))

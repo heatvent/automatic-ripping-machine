@@ -1,10 +1,4 @@
-"""
-ARM route blueprint for log pages
-Covers
-- logs [GET]
-- listlogs [GET]
-- logreader [GET]
-"""
+"""Log viewer (/logs, /logreader) and a bookmark redirect for /listlogs."""
 
 import os
 from pathlib import Path
@@ -39,7 +33,7 @@ def logs():
 @route_logs.route('/listlogs', defaults={'path': ''})
 @login_required
 def listlogs(path):
-    """Logs now live on History; keep this URL as a redirect."""
+    """Old log-list page; the files now sit at the bottom of History."""
     return redirect(url_for("route_jobs.view_jobs") + "#other-logs")
 
 

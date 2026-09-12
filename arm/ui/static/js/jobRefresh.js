@@ -5,6 +5,7 @@
 /* jshint strict: false */
 
 
+/* Home page: poll /json?mode=joblist and patch the active-job cards in place. */
 let hrrref = "";
 let activeJob = null;
 let actionType = null;
@@ -81,9 +82,11 @@ function updateProgress(job, oldJob) {
                              </small></div></div>`;
     const mainProgressBar = `<div id="jobId${job.job_id}_stage"><b>Stage: </b>${job.stage}</div>
                              <div id="jobId${job.job_id}_progress" ><div class="progress">${subProgressBar}</div>
-                             <div id="jobId${job.job_id}_eta"><b>ETA: </b>${job.eta}</div>
-                             <div id="jobId${job.job_id}_cur_fps"><b>CUR FPS: </b>${job.cur_fps}</div>
-                             <div id="jobId${job.job_id}_avg_fps"><b>AVG FPS: </b>${job.avg_fps}</div>`;
+                             <div id="jobId${job.job_id}_eta"><b>ETA: </b>${job.eta}</div>` +
+        ((job.status === "transcoding" || job.status === "waiting_transcode")
+            ? `<div id="jobId${job.job_id}_cur_fps"><b>CUR FPS: </b>${job.cur_fps}</div>
+                             <div id="jobId${job.job_id}_avg_fps"><b>AVG FPS: </b>${job.avg_fps}</div>`
+            : "");
     const progressSection = $(`#jobId${job.job_id}_progress_section`);
     const stage = $(`#jobId${job.job_id}_stage`);
     const eta = $(`#jobId${job.job_id}_eta`);
@@ -107,21 +110,23 @@ function updateProgress(job, oldJob) {
             updateContents(stage, job, "Stage", job.stage);
             updateContents(eta, job, "ETA", job.eta);
 
-            const curFpsDiv = $(`#jobId${job.job_id}_cur_fps`);
-            const avgFpsDiv = $(`#jobId${job.job_id}_avg_fps`);
+            if (job.status === "transcoding" || job.status === "waiting_transcode") {
+                const curFpsDiv = $(`#jobId${job.job_id}_cur_fps`);
+                const avgFpsDiv = $(`#jobId${job.job_id}_avg_fps`);
 
-            if (job.cur_fps === undefined || job.cur_fps === '-1') {
-                curFpsDiv.hide();
-            } else {
-                curFpsDiv.show();
-                updateContents(curFpsDiv, job, "CUR FPS", job.cur_fps);
-            }
+                if (job.cur_fps === undefined || job.cur_fps === '-1') {
+                    curFpsDiv.hide();
+                } else {
+                    curFpsDiv.show();
+                    updateContents(curFpsDiv, job, "CUR FPS", job.cur_fps);
+                }
 
-            if (job.avg_fps === undefined || job.avg_fps === '-1') {
-                avgFpsDiv.hide();
-            } else {
-                avgFpsDiv.show();
-                updateContents(avgFpsDiv, job, "AVG FPS", job.avg_fps);
+                if (job.avg_fps === undefined || job.avg_fps === '-1') {
+                    avgFpsDiv.hide();
+                } else {
+                    avgFpsDiv.show();
+                    updateContents(avgFpsDiv, job, "AVG FPS", job.avg_fps);
+                }
             }
         }
     }
@@ -204,10 +209,14 @@ function updateJobItem(oldJob, job) {
                 posterUrl[0].src = nextPoster;
             }
         }
+        const wrap = posterUrl[0].closest(".job-cover");
+        if (wrap && typeof isMusicJob === "function") {
+            wrap.classList.toggle("job-cover-music", isMusicJob(job));
+        }
     }
     if (status[0]) {
         const rawStatus = status[0].dataset.status || "";
-        const label = (typeof statusLabel === "function") ? statusLabel(job.status) : job.status;
+        const label = (typeof statusLabel === "function") ? statusLabel(job.status, job) : job.status;
         if (job.status !== rawStatus || status[0].textContent !== label) {
             status[0].className = (typeof statusClass === "function")
                 ? statusClass(job.status)
@@ -291,6 +300,7 @@ function updateHomeEmptyState() {
     const heading = document.getElementById("homeHeading");
     const joblist = document.getElementById("joblist");
     const hint = document.getElementById("homeIdleHint");
+    const pipelineEl = document.getElementById("homePipeline");
     if (!joblist) {
         return;
     }
@@ -301,7 +311,26 @@ function updateHomeEmptyState() {
     if (hint) {
         hint.hidden = hasJobs;
     }
+    if (pipelineEl) {
+        pipelineEl.hidden = hasJobs;
+    }
     joblist.hidden = !hasJobs;
+}
+
+function homeDriveTrayButtons(drive) {
+    const driveId = drive && drive.drive_id;
+    const canTray = Boolean(drive && drive.mount) && driveId != null && driveId !== "";
+    if (canTray) {
+        const id = encodeURIComponent(String(driveId));
+        return `<div class="home-drive-actions">` +
+            `<a href="drive/open/${id}?next=/" class="btn btn-secondary btn-sm text-nowrap">Open</a>` +
+            `<a href="drive/close/${id}?next=/" class="btn btn-secondary btn-sm text-nowrap">Close</a>` +
+            `</div>`;
+    }
+    return `<div class="home-drive-actions">` +
+        `<button type="button" class="btn btn-secondary btn-sm text-nowrap" disabled title="Drive has no mount path">Open</button>` +
+        `<button type="button" class="btn btn-secondary btn-sm text-nowrap" disabled title="Drive has no mount path">Close</button>` +
+        `</div>`;
 }
 
 function renderHomeConsole(data) {
@@ -310,6 +339,19 @@ function renderHomeConsole(data) {
     const warnEl = document.getElementById("homePathWarn");
     if (!data) {
         return;
+    }
+    const pipelineEl = document.getElementById("homePipeline");
+    if (pipelineEl && data.pipeline) {
+        const movie = data.pipeline.movie && data.pipeline.movie.sentence;
+        const music = data.pipeline.music && data.pipeline.music.sentence;
+        const parts = [];
+        if (movie) {
+            parts.push("<p><strong>Movie / TV disc:</strong> " + escapeHomeText(movie) + "</p>");
+        }
+        if (music) {
+            parts.push("<p><strong>Music CD:</strong> " + escapeHomeText(music) + "</p>");
+        }
+        pipelineEl.innerHTML = parts.join("");
     }
     const paths = Array.isArray(data.path_health) ? data.path_health : [];
     if (pathsEl) {
@@ -350,7 +392,7 @@ function renderHomeConsole(data) {
                 const mount = drive.mount ? `<div class="home-console-meta">${escapeHomeText(drive.mount)}</div>` : "";
                 return `<div class="home-drive"><div class="home-drive-copy"><strong>${escapeHomeText(drive.name)}</strong>` +
                     `${mount}</div><div class="home-drive-status"><span class="home-tray is-${escapeHomeText(tray)}">${escapeHomeText(tray)}</span>` +
-                    `<span class="home-console-meta">${escapeHomeText(mode)}</span></div></div>`;
+                    `<span class="home-console-meta">${escapeHomeText(mode)}</span></div>${homeDriveTrayButtons(drive)}</div>`;
             }).join("");
         }
     }

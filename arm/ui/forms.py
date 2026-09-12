@@ -1,7 +1,8 @@
 """Forms used in the arm ui"""
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, SelectField, \
-    IntegerField, BooleanField, PasswordField, Form, FieldList, FormField, HiddenField
+    IntegerField, BooleanField, PasswordField, Form, FieldList, FormField, \
+    HiddenField, FileField
 from wtforms.validators import DataRequired, Optional
 
 
@@ -47,8 +48,11 @@ class SettingsForm(FlaskForm):
 
 
 class UiSettingsForm(FlaskForm):
-    """UI settings form, used on pages\n
-                  - /ui_settings"""
+    """UI settings form, used on Settings → General → Web UI.
+
+    notify_refresh is posted as a hidden field so the existing DB column still
+    round-trips. Do not add a visible control unless the toasts come back.
+    """
     index_refresh = IntegerField('index_refresh', validators=[DataRequired()])
     use_icons = StringField('use_icons')
     save_remote_images = StringField('save_remote_images')
@@ -95,6 +99,18 @@ class PasswordReset(FlaskForm):
 
 class AbcdeForm(FlaskForm):
     """CSRF wrapper for CD ripper (abcde) settings on /settings."""
+
+
+class RestoreBackupForm(FlaskForm):
+    """Restore an ARM backup zip on the Maintenance tab."""
+    backup_file = FileField('backup_file')
+    submit = SubmitField('Restore')
+
+
+class MaintenanceActionForm(FlaskForm):
+    """CSRF wrapper for Maintenance tab delete actions."""
+    action = HiddenField('action', validators=[DataRequired()])
+    confirm_text = StringField('confirm_text', validators=[Optional()])
 
 
 class SystemInfoDrives(FlaskForm):

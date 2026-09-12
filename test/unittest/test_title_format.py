@@ -90,6 +90,9 @@ class TestCleanForFilename(unittest.TestCase):
         self.assertEqual(clean_for_filename(None), "untitled")
         self.assertEqual(clean_for_filename("   ", fallback="music_cd"), "music_cd")
 
+    def test_american_sniper_passthrough(self):
+        self.assertEqual(clean_for_filename("American Sniper"), "American Sniper")
+
 
 if __name__ == "__main__":
     unittest.main()

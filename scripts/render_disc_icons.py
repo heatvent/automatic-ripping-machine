@@ -1,4 +1,4 @@
-"""Render the gold disc brand mark to favicon and app icon PNGs."""
+"""Render the ARM disc brand mark to favicon and app icon PNGs."""
 import math
 import os
 
@@ -13,7 +13,7 @@ def hexrgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
-STOPS = [(0.0, hexrgb("f3d07a")), (0.42, hexrgb("e0b04a")), (1.0, hexrgb("8a6a28"))]
+STOPS = [(0.0, hexrgb("8eb4d4")), (0.42, hexrgb("446e9b")), (1.0, hexrgb("2a4a6e"))]
 
 
 def color_at(t):
@@ -77,7 +77,7 @@ def render_disc(size, background=BG, padding_ratio=0.08, supersample=4):
 
     for overlay in (
         ring(11.2, hexrgb("121212"), 0.7, 0.16),
-        ring(8.1, hexrgb("f7e7b8"), 0.8, 0.40),
+        ring(8.1, hexrgb("c5d4e8"), 0.8, 0.40),
         ring(5.4, hexrgb("121212"), 0.7, 0.20),
     ):
         canvas = Image.alpha_composite(canvas, overlay)
@@ -88,13 +88,13 @@ def render_disc(size, background=BG, padding_ratio=0.08, supersample=4):
     draw.ellipse(
         [cx - hub_r, cy - hub_r, cx + hub_r, cy + hub_r],
         fill=hexrgb("1a1a1a") + (255,),
-        outline=hexrgb("c49a3c") + (255,),
+        outline=hexrgb("6b93b8") + (255,),
         width=hub_w,
     )
     dot_r = (1.2 / 32.0) * inner
     draw.ellipse(
         [cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r],
-        fill=hexrgb("e0b04a") + (255,),
+        fill=hexrgb("446e9b") + (255,),
     )
     return canvas.resize((size, size), Image.Resampling.LANCZOS)
 

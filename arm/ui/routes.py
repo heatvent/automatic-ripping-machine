@@ -27,7 +27,8 @@ from arm.models.user import User
 import arm.config.config as cfg
 from arm.ui.forms import DBUpdate
 
-# This attaches the armui_cfg globally to let the users use any bootswatch skin from cdn
+# Load UISettings into Jinja (index_refresh, database_limit). The local name is
+# unused; the side effect of arm_db_cfg() is what matters.
 armui_cfg = ui_utils.arm_db_cfg()
 
 # Define the Flask login manager

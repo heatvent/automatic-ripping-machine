@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from arm.config.config_utils import ENUM_SETTING_CHOICES  # noqa: E402
 from arm.ui.settings.abcde_utils import (  # noqa: E402
+    abcde_groups_for_ui,
     apply_abcde_updates,
     parse_abcde_values,
     validate_abcde_form,
@@ -93,8 +94,8 @@ class TestSettingMeta(unittest.TestCase):
         }
         groups = grouped_setting_keys(settings)
         titles = [title for _, title, _ in groups]
-        self.assertIn("General", titles)
-        self.assertIn("MakeMKV", titles)
+        self.assertIn("Identity", titles)
+        self.assertIn("Rip with MakeMKV", titles)
         self.assertIn("HandBrake", titles)
         other = [keys for group_id, _, keys in groups if group_id == "other"]
         self.assertEqual(other, [["CUSTOM_EXTRA"]])
@@ -123,6 +124,106 @@ class TestSettingMeta(unittest.TestCase):
         self.assertIn("EMBY_SERVER", notify_keys)
         self.assertIn("NOTIFY_RIP", notify_keys)
         self.assertNotIn("UNIDENTIFIED_EJECT", general_keys + ripper_keys + notify_keys)
+
+    def test_general_groups_split_identity_and_logging(self):
+        settings = {
+            "ARM_NAME": "lab",
+            "DISABLE_LOGIN": "false",
+            "DATE_FORMAT": "%Y",
+            "ARM_CHILDREN": "",
+            "LOGLEVEL": "INFO",
+            "LOGLIFE": "1",
+            "WEBSERVER_PORT": "8080",
+        }
+        pages = page_setting_groups(settings)
+        titles = [title for _, title, _ in pages["general"]]
+        self.assertEqual(titles[:3], ["Identity", "Logging", "Web Server"])
+        by_id = {group_id: keys for group_id, _, keys in pages["general"]}
+        self.assertEqual(by_id["identity"], [
+            "ARM_NAME", "DISABLE_LOGIN", "DATE_FORMAT", "ARM_CHILDREN",
+        ])
+        self.assertEqual(by_id["logging"], ["LOGLEVEL", "LOGLIFE"])
+
+    def test_notify_groups_split_services(self):
+        settings = {
+            "NOTIFY_RIP": "true",
+            "NOTIFY_TRANSCODE": "true",
+            "NOTIFY_JOBID": "false",
+            "IFTTT_KEY": "x",
+            "IFTTT_EVENT": "arm_event",
+            "PO_USER_KEY": "u",
+            "PO_APP_KEY": "a",
+            "PB_KEY": "p",
+            "BASH_SCRIPT": "",
+            "JSON_URL": "",
+            "APPRISE": "/etc/arm/config/apprise.yaml",
+            "EMBY_SERVER": "emby",
+        }
+        pages = page_setting_groups(settings)
+        titles = [title for _, title, _ in pages["notify"]]
+        self.assertEqual(
+            titles,
+            [
+                "When to Notify",
+                "IFTTT",
+                "Pushover",
+                "Pushbullet",
+                "Script and Webhook",
+                "Emby",
+                "Apprise File",
+            ],
+        )
+        by_id = {group_id: keys for group_id, _, keys in pages["notify"]}
+        self.assertEqual(by_id["ifttt"], ["IFTTT_KEY", "IFTTT_EVENT"])
+        self.assertEqual(by_id["pushover"], ["PO_USER_KEY", "PO_APP_KEY"])
+        self.assertEqual(by_id["apprise"], ["APPRISE"])
+        self.assertNotIn("APPRISE", by_id["when"])
+
+    def test_ripper_groups_and_cd_title_source(self):
+        settings = {
+            "GET_VIDEO_TITLE": "true",
+            "MINLENGTH": "600",
+            "MANUAL_WAIT": "true",
+            "RIPMETHOD": "mkv",
+            "SKIP_TRANSCODE": "true",
+            "USE_FFMPEG": "false",
+            "MAX_CONCURRENT_TRANSCODES": "1",
+            "HB_PRESET_DVD": "HQ",
+            "GET_AUDIO_TITLE": "musicbrainz",
+            "CUSTOM_EXTRA": "1",
+        }
+        pages = page_setting_groups(settings)
+        titles = [title for _, title, _ in pages["ripper"]]
+        self.assertIn("Identify", titles)
+        self.assertIn("Tracks to Rip", titles)
+        self.assertIn("Transcode", titles)
+        self.assertIn("HandBrake", titles)
+        self.assertIn("FFmpeg", titles)
+        self.assertIn("Job Flow", titles)
+        by_id = {group_id: keys for group_id, _, keys in pages["ripper"]}
+        self.assertEqual(by_id["transcode"], ["SKIP_TRANSCODE", "MAX_CONCURRENT_TRANSCODES"])
+        self.assertIn("HB_PRESET_DVD", by_id["handbrake"])
+        self.assertNotIn("USE_FFMPEG", by_id["transcode"])
+        self.assertEqual(by_id["ffmpeg"][0], "USE_FFMPEG")
+        ripper_keys = [key for _, _, keys in pages["ripper"] for key in keys]
+        self.assertNotIn("GET_AUDIO_TITLE", ripper_keys)
+        self.assertIn("CUSTOM_EXTRA", ripper_keys)
+
+    def test_abcde_config_file_is_not_on_general_or_ripper(self):
+        settings = {
+            "ARM_NAME": "lab",
+            "LOGPATH": "/logs",
+            "DBFILE": "/db",
+            "INSTALLPATH": "/opt/arm",
+            "ABCDE_CONFIG_FILE": "/etc/arm/config/abcde.conf",
+            "RIPMETHOD": "mkv",
+        }
+        pages = page_setting_groups(settings)
+        general_keys = [key for _, _, keys in pages["general"] for key in keys]
+        ripper_keys = [key for _, _, keys in pages["ripper"] for key in keys]
+        self.assertNotIn("ABCDE_CONFIG_FILE", general_keys)
+        self.assertNotIn("ABCDE_CONFIG_FILE", ripper_keys)
+        self.assertIn("INSTALLPATH", general_keys)
 
     def test_makemkv_selection_keys_group_and_validate(self):
         settings = {
@@ -238,6 +339,18 @@ MAXPROCS=2
             "CDDBMETHOD": "musicbrainz",
             "OUTPUTTYPE": "flac,mp3",
         }), {})
+
+    def test_abcde_groups_for_ui(self):
+        groups = abcde_groups_for_ui(self.SAMPLE)
+        titles = [group["title"] for group in groups]
+        self.assertEqual(titles, ["CD Jobs", "Output", "Ripping"])
+        lookup_keys = [field["key"] for field in groups[0]["fields"]]
+        self.assertEqual(lookup_keys, ["CDDBMETHOD"])
+        output = next(field for field in groups[1]["fields"] if field["key"] == "OUTPUTTYPE")
+        choice_values = [opt for opt, _label in output["choices"]]
+        self.assertIn("flac", choice_values)
+        self.assertIn("mp3", choice_values)
+        self.assertIn("flac,mp3", choice_values)
 
 
 class TestServerUtilDiskSpace(unittest.TestCase):

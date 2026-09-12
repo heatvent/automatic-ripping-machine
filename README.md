@@ -12,7 +12,7 @@ This is not the Docker Hub `automaticrippingmachine/automatic-ripping-machine` i
 ## Significant changes vs upstream
 
 ### User interface
-- Dark gold theme, phone bottom nav, and grouped **Settings** (General, System Information, Disk Drives, Movie Ripper, CD Ripper, Notifications).
+- Dark gold theme, phone bottom nav, and grouped **Settings** (General including Web UI, Disk Drives, Movie Ripper, CD Ripper, Notifications, Maintenance, then System Information).
 - Settings use plain-language labels, Yes/No and dropdowns, and help popovers that include the YAML key.
 - API keys and passwords are masked in the UI. Login is required unless you turn it off.
 - Job cards and Jobs no longer treat the text `None` as a real title or poster.

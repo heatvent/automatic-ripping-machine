@@ -1,9 +1,9 @@
 """
-ARM route blueprint for database pages
-Covers
-- database [GET]
-- dbupdate [POST]
-- import_movies [JSON]
+ARM route blueprint for database pages.
+
+/database redirects to History (/jobs). /dbupdate is the POST used from the
+first-run / missing-DB support page. /import_movies is a hidden JSON helper
+that is not linked in the UI; it hammers OMDb, so do not call it often.
 """
 
 import os
@@ -23,14 +23,15 @@ route_database = Blueprint('route_database', __name__,
                            template_folder='templates',
                            static_folder='../static')
 
-# This attaches the armui_cfg globally to let the users use any bootswatch skin from cdn
+# Load UISettings into Jinja (index_refresh, database_limit). The local name is
+# unused; the side effect of arm_db_cfg() is what matters.
 armui_cfg = ui_utils.arm_db_cfg()
 
 
 @route_database.route('/database')
 @login_required
 def view_database():
-    """Kept as a bookmark; jobs now live on /jobs."""
+    """Old /database URL; jobs now live on History (/jobs)."""
     return redirect(url_for('route_jobs.view_jobs', page=request.args.get('page')))
 
 
@@ -67,13 +68,10 @@ def update_database():
 @route_database.route('/import_movies')
 @login_required
 def import_movies():
-    """
-    Function for finding all movies not currently tracked by ARM in the COMPLETED_PATH
-    This should not be run frequently
-    This causes a HUGE number of requests to OMdb\n
-    :return: Outputs json - contains a dict/json of movies added and a notfound list
-             that doesn't match ARM identified folder format.
-    .. note:: This should eventually be moved to /json page load times are too long
+    """Scan COMPLETED_PATH for 'Title (year)' folders and add missing jobs.
+
+    Not linked in the UI. Hits OMDb once per folder, so do not call often.
+    Returns JSON: added movies plus a notfound list for names that did not match.
     """
     my_path = cfg.arm_config['COMPLETED_PATH']
     app.logger.debug(my_path)

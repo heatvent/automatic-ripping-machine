@@ -1,55 +1,67 @@
 {% block abcde %}
-    {% from 'macros/icons.html' import info_icon %}
     {% from 'macros/settings.html' import setting_caption, setting_info %}
     <div class="tab-pane pt-5" id="abcde" role="tabpanel" aria-labelledby="abcde-tab">
-        <p class="text-muted">These options update <code>abcde.conf</code> used for audio CDs. Comments and advanced lines in the file are kept.</p>
+        <nav class="settings-toc" aria-label="CD ripper sections">
+            {% for group in abcde_groups %}
+            <a href="#abcde-{{ group.id }}">{{ group.title }}</a>
+            {% endfor %}
+        </nav>
+        <p class="text-muted">Album Lookup is the MusicBrainz setting for CD rips. ARM always names the job from MusicBrainz so it is not left untitled. CD Ripper Config File updates <code>arm.yaml</code>; the rest update <code>abcde.conf</code>.</p>
         <form id="abcdeSettings" name="abcdeSettings" method="post" action="" novalidate>
             {{ form.hidden_tag() }}
-            {% for field in abcde_fields %}
+            {% for group in abcde_groups %}
+            <section class="settings-section" id="abcde-{{ group.id }}">
+                <h5>{{ group.title }}</h5>
+                {% for field in group.fields %}
+                    <div class="setting-block">
+                    <div class="input-group mb-1">
+                        {{ setting_caption(field.key, field.label) }}
+                        {% if field.kind == 'yn' %}
+                            <select class="form-control custom-select" aria-label="{{ field.key }}" name="{{ field.key }}"
+                                    {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
+                                <option value="y"{% if field.value in ['y', 'Y', 'yes', 'true'] %} selected{% endif %}>Yes</option>
+                                <option value="n"{% if field.value not in ['y', 'Y', 'yes', 'true'] %} selected{% endif %}>No</option>
+                            </select>
+                        {% elif field.kind == 'enum' %}
+                            <select class="form-control custom-select" aria-label="{{ field.key }}" name="{{ field.key }}"
+                                    {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
+                                {% for opt, opt_label in field.choices %}
+                                    <option value="{{ opt }}"{% if field.value == opt %} selected{% endif %}>{{ opt_label }}</option>
+                                {% endfor %}
+                                {% if field.value and field.value not in field.choice_values %}
+                                    <option value="{{ field.value }}" selected>{{ field.value }} (current)</option>
+                                {% endif %}
+                            </select>
+                        {% elif field.kind == 'int' %}
+                            <input type="number" class="form-control" aria-label="{{ field.key }}" name="{{ field.key }}"
+                                   value="{{ field.value }}" min="{{ field.minimum or 0 }}" max="{{ field.maximum or 99 }}"
+                                   {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
+                        {% else %}
+                            <input type="text" class="form-control" aria-label="{{ field.key }}" name="{{ field.key }}"
+                                   value="{{ field.value }}"
+                                   {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
+                        {% endif %}
+                        {{ setting_info(field.key, field.help, field.label) }}
+                    </div>
+                    <div class="invalid-feedback setting-error" data-error-for="{{ field.key }}" hidden></div>
+                    </div>
+                {% endfor %}
+                {% if group.id == 'jobs' %}
                 <div class="setting-block">
                 <div class="input-group mb-1">
-                    {{ setting_caption(field.key, field.label) }}
-                    {% if field.kind == 'yn' %}
-                        <select class="form-control custom-select" aria-label="{{ field.key }}" name="{{ field.key }}"
-                                {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
-                            <option value="y"{% if field.value in ['y', 'Y', 'yes', 'true'] %} selected{% endif %}>Yes</option>
-                            <option value="n"{% if field.value not in ['y', 'Y', 'yes', 'true'] %} selected{% endif %}>No</option>
-                        </select>
-                    {% elif field.kind == 'enum' and field.allow_custom %}
-                        <input type="text" class="form-control" aria-label="{{ field.key }}" name="{{ field.key }}"
-                               list="{{ field.key }}-choices" value="{{ field.value }}"
-                               {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
-                        <datalist id="{{ field.key }}-choices">
-                            {% for opt, opt_label in field.choices %}
-                                <option value="{{ opt }}">{{ opt_label }}</option>
-                            {% endfor %}
-                        </datalist>
-                    {% elif field.kind == 'enum' %}
-                        <select class="form-control custom-select" aria-label="{{ field.key }}" name="{{ field.key }}"
-                                {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
-                            {% for opt, opt_label in field.choices %}
-                                <option value="{{ opt }}"{% if field.value == opt %} selected{% endif %}>{{ opt_label }}</option>
-                            {% endfor %}
-                            {% if field.value and field.value not in field.choice_values %}
-                                <option value="{{ field.value }}" selected>{{ field.value }} (current)</option>
-                            {% endif %}
-                        </select>
-                    {% elif field.kind == 'int' %}
-                        <input type="number" class="form-control" aria-label="{{ field.key }}" name="{{ field.key }}"
-                               value="{{ field.value }}" min="{{ field.minimum or 0 }}" max="{{ field.maximum or 99 }}"
-                               {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
-                    {% else %}
-                        <input type="text" class="form-control" aria-label="{{ field.key }}" name="{{ field.key }}"
-                               value="{{ field.value }}"
-                               {% if abcde_read_only %}disabled="" title="abcde.conf is read-only"{% endif %}>
-                    {% endif %}
-                    {{ setting_info(field.key, field.help, field.label) }}
+                    {{ setting_caption('ABCDE_CONFIG_FILE', setting_label('ABCDE_CONFIG_FILE')) }}
+                    <input type="text" class="form-control" aria-label="ABCDE_CONFIG_FILE" name="ABCDE_CONFIG_FILE"
+                           value="{{ settings.get('ABCDE_CONFIG_FILE', '') }}"
+                           {% if ripper_read_only %}disabled="" title="arm.yaml is read-only"{% endif %}>
+                    {{ setting_info('ABCDE_CONFIG_FILE', jsoncomments.get('ABCDE_CONFIG_FILE') or 'Path to the abcde.conf used for audio CD rips.', setting_label('ABCDE_CONFIG_FILE')) }}
                 </div>
-                <div class="invalid-feedback setting-error" data-error-for="{{ field.key }}" hidden></div>
+                <div class="invalid-feedback setting-error" data-error-for="ABCDE_CONFIG_FILE" hidden></div>
                 </div>
+                {% endif %}
+            </section>
             {% endfor %}
             <button id="cdRipperSubmit" class="btn btn-secondary btn-lg btn-block settings-save"
-                    form="abcdeSettings" type="submit"{% if abcde_read_only %} disabled{% endif %}>
+                    form="abcdeSettings" type="submit"{% if abcde_read_only and ripper_read_only %} disabled{% endif %}>
                 Save CD Ripper Settings
             </button>
         </form>

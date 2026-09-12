@@ -4,6 +4,7 @@
 /* jshint node: true */
 /* jshint strict: false */
 
+/* Job-card HTML and History helpers shared by Home and the job list. */
 const MODEL_ID = "#exampleModal";
 const DB_SUCCESS_BTN_ID = "#save-get-success";
 const DB_FAIL_BTN_ID = "#save-get-failed";
@@ -85,8 +86,10 @@ function transcodingCheck(job) {
                 </div>
               </div></div>`;
         x += `<div id="jobId${job.job_id}_eta"><strong>ETA: </strong>${job.eta}</div>`;
-        x += `<div id="jobId${job.job_id}_cur_fps"><strong>CUR FPS: </strong>${job.cur_fps}</div>`;
-        x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${job.avg_fps}</div>`;
+        if (transcodeBar) {
+            x += `<div id="jobId${job.job_id}_cur_fps"><strong>CUR FPS: </strong>${job.cur_fps}</div>`;
+            x += `<div id="jobId${job.job_id}_avg_fps"><strong>AVG FPS: </strong>${job.avg_fps}</div>`;
+        }
     }
     // YYYY-MM-DD
     const d = new Date(Date.parse(job.start_time));
@@ -126,6 +129,22 @@ function jobPosterSrc(job) {
     return "/static/img/none.png";
 }
 
+function jobCoverClass(job, extraClass) {
+    const classes = ["job-cover"];
+    if (extraClass) {
+        classes.push(extraClass);
+    }
+    if (isMusicJob(job)) {
+        classes.push("job-cover-music");
+    }
+    return classes.join(" ");
+}
+
+function jobCoverHtml(job, extraClass, imgAttrs) {
+    const id = imgAttrs && imgAttrs.id ? ` id="${imgAttrs.id}"` : "";
+    return `<span class="${jobCoverClass(job, extraClass)}"><img${id} src="${jobPosterSrc(job)}" alt="" loading="lazy"></span>`;
+}
+
 function musicCheck(job, idsplit) {
     let x = "";
     if (!isMusicJob(job)) {
@@ -137,7 +156,7 @@ function musicCheck(job, idsplit) {
 }
 
 function posterCheck(job) {
-    return `<img id="jobId${job.job_id}_poster_url" alt="poster img" src="${jobPosterSrc(job)}" class="img-thumbnail job-card-cover">`;
+    return jobCoverHtml(job, "job-cover-lg", {id: `jobId${job.job_id}_poster_url`});
 }
 
 const STATUS_LABELS = {
@@ -155,9 +174,33 @@ const STATUS_LABELS = {
     no: "No",
 };
 
-function statusLabel(status) {
+function statusLabel(status, job) {
+    if (job && job.tool_status) {
+        return job.tool_status;
+    }
     const raw = String(status == null ? "" : status);
-    const mapped = STATUS_LABELS[raw.toLowerCase()];
+    const key = raw.toLowerCase();
+    const disc = String((job && (job.disctype || job.video_type)) || "").toLowerCase();
+    const isMusic = disc === "music";
+    if (isMusic && key === "info") {
+        return "MusicBrainz";
+    }
+    if (isMusic && key === "ripping") {
+        return "abcde";
+    }
+    if (key === "info") {
+        return "Identify";
+    }
+    if (key === "ripping") {
+        return "MakeMKV";
+    }
+    if (key === "transcoding") {
+        return "HandBrake";
+    }
+    if (key === "waiting_transcode") {
+        return "Waiting for HandBrake";
+    }
+    const mapped = STATUS_LABELS[key];
     if (mapped) {
         return mapped;
     }
@@ -170,8 +213,8 @@ function statusClass(status) {
     return "status-badge status-" + String(status || "").toLowerCase().replace(/\s+/g, "-");
 }
 
-function statusBadgeHtml(id, status) {
-    const label = statusLabel(status);
+function statusBadgeHtml(id, status, job) {
+    const label = statusLabel(status, job);
     const raw = String(status == null ? "" : status);
     return `<span id="${id}" class="${statusClass(status)}" title="${label}" data-status="${raw}">${label}</span>`;
 }
@@ -222,7 +265,7 @@ function buildMiddleSection(job) {
     x = "<div class=\"job-card-details\"><div class=\"card-body px-1 py-1\">";
     x += `<div id="jobId${job.job_id}_video_type"><strong>Type: </strong>${jobTypeLabel(job)}</div>`;
     x += `<div id="jobId${job.job_id}_devpath"><strong>Device: </strong>${job.devpath}</div>`;
-    x += `<div><strong>Status: </strong>${statusBadgeHtml("jobId" + job.job_id + "_status", job.status)}</div>`;
+    x += `<div><strong>Status: </strong>${statusBadgeHtml("jobId" + job.job_id + "_status", job.status, job)}</div>`;
     x += `<div id="jobId${job.job_id}_progress_section">${transcodingCheck(job)}</div></div></div>`;
     return x;
 }
@@ -294,18 +337,4 @@ function hideModal() {
     $('#message1').removeClass('d-none');
     $('#message2').addClass('d-none');
     $('#message3').addClass('d-none');
-}
-
-function pingReadNotify(toastId) {
-    $.ajax({
-        url: "/json?mode=read_notification&notify_id=" + toastId,
-        type: "get",
-        timeout: 2000
-    });
-}
-
-function addToast(_title, _body, toastId) {
-    if (toastId !== undefined && toastId !== null && toastId !== "") {
-        pingReadNotify(toastId);
-    }
 }

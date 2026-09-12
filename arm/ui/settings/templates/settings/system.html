@@ -36,11 +36,10 @@
                 </div>
             </div>
         </section>
-        <section class="system-section" id="system-info">
-            <h5>System Information</h5>
-            <p>Current CPU and System Information —
-                <a href="updatesysinfo">Update System Information</a></p>
-            {% include 'settings/sysinfo.html' %}
-        </section>
+        <p class="text-muted">
+            Live CPU, memory, storage, and hardware transcode support from this machine.
+            <a href="updatesysinfo">Refresh system information</a>
+        </p>
+        {% include 'settings/sysinfo.html' %}
     </div>
 {% endblock %}

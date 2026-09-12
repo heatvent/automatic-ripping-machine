@@ -1,16 +1,7 @@
-"""
-ARM route blueprint for jobs pages
-Covers
-- jobdetail [GET]
-- jobdetailload [POST]
-- titlesearch [GET]
-- custometitle [GET]
-- gettitle / customtitle [GET]
-- updatetitle [GET]
-- activerips [GET]
-- changeparams [GET]
-- list_titles [GET]
-- json [JSON GET]
+"""Jobs UI: History list, job-detail page, title search, and /json AJAX.
+
+History lives at /jobs. Home cards poll /json?mode=joblist.
+/history, /database, and /listlogs redirect here so old bookmarks still work.
 """
 
 import json
@@ -20,15 +11,111 @@ from flask import render_template, request, Blueprint, flash, redirect, url_for,
 from werkzeug.routing import ValidationError
 
 import arm.ui.utils as ui_utils
+from arm.title_format import clean_for_filename
 from arm.ui import app, db, constants, json_api
 from arm.models.job import Job, JobState
-from arm.models.notifications import Notifications
 import arm.config.config as cfg
 from arm.ui.forms import TitleSearchForm, ChangeParamsForm, TrackFormDynamic
+from arm.ui.workflow import movie_pipeline, music_pipeline
 
 route_jobs = Blueprint('route_jobs', __name__,
                        template_folder='templates',
                        static_folder='../static')
+
+
+def _is_music_job(job):
+    """True for audio CD jobs.
+
+    Type can live in video_type and/or disctype; older rows often have only one.
+    """
+    return (job.video_type or "").lower() == "music" or (job.disctype or "").lower() == "music"
+
+
+def format_track_length(length, is_music=False):
+    """Format stored track length for the job-detail table.
+
+    MusicBrainz stores milliseconds; MakeMKV stores seconds.
+    Returns M:SS, or H:MM:SS when the track is an hour or longer.
+    """
+    try:
+        value = int(length or 0)
+    except (TypeError, ValueError):
+        return "—"
+    seconds = round(value / 1000) if is_music else value
+    if seconds < 0:
+        seconds = 0
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
+def _fact(label, value, href=None):
+    """One labeled row for the job-detail info grid, or None if the value is empty."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.upper() == "N/A":
+        return None
+    return {"label": label, "value": text, "href": href}
+
+
+def _omdb_facts(search_results):
+    """Movie/TV ratings and credits from OMDb or TMDb.
+
+    Those APIs have no physical-media barcode; music jobs use MusicBrainz instead.
+    """
+    facts = []
+    if not search_results or search_results.get("Error") or search_results.get("Response") == "False":
+        return facts
+    for rating in search_results.get("Ratings") or []:
+        fact = _fact(rating.get("Source"), rating.get("Value"))
+        if fact:
+            facts.append(fact)
+    extras = (
+        ("Rated", "Rated"),
+        ("Runtime", "Runtime"),
+        ("Genre", "Genre"),
+        ("Director", "Director"),
+        ("Actors", "Cast"),
+        ("Awards", "Awards"),
+    )
+    for key, label in extras:
+        fact = _fact(label, search_results.get(key))
+        if fact:
+            facts.append(fact)
+    imdb_id = search_results.get("imdbID")
+    if imdb_id and str(imdb_id).upper() != "N/A":
+        facts.append(_fact("IMDb", imdb_id, f"https://www.imdb.com/title/{imdb_id}/"))
+    return [item for item in facts if item]
+
+
+def _album_facts(job, album):
+    """Album facts for job detail, including MusicBrainz barcode and catalog number."""
+    facts = []
+    if album:
+        facts.extend([
+            _fact("Artist", album.get("artist")),
+            _fact("Album", album.get("album")),
+            _fact("Year", album.get("year") or job.year),
+            _fact("Label", album.get("label")),
+            _fact("Barcode", album.get("barcode")),
+            _fact("Catalog #", album.get("catalog")),
+            _fact("Country", album.get("country")),
+            _fact("Type", album.get("primary_type") or album.get("status")),
+            _fact("MusicBrainz", album.get("mbid"), album.get("url")),
+        ])
+    else:
+        facts.extend([
+            _fact("Year", job.year),
+            _fact("MusicBrainz", job.crc_id,
+                  f"https://musicbrainz.org/release/{job.crc_id}"
+                  if job.crc_id and len(str(job.crc_id)) == 36 else None),
+        ])
+    facts.append(_fact("Tracks", job.no_of_titles))
+    facts.append(_fact("Disc label", job.label))
+    return [item for item in facts if item]
 
 
 def _other_log_files(jobs):
@@ -85,11 +172,11 @@ def view_jobs():
 @route_jobs.route('/jobdetail')
 @login_required
 def jobdetail():
-    """
-    Page for showing in-depth details about a job
+    """Job detail: plot/ratings for video, MusicBrainz facts for CDs, plus tracks.
 
-    Shows Job/Config/Track class details
-    displays them in a clear and easy to ready format
+    Missing job_id flashes "Job not found" and returns to History.
+    Music jobs hide the cinematic background; album art uses object-fit: contain
+    so non-square Cover Art Archive images are not cropped.
     """
     manual_edit = False
 
@@ -97,8 +184,10 @@ def jobdetail():
     track_form = TrackFormDynamic()
 
     job_id = request.args.get('job_id')
-    if (job := Job.query.get(job_id)) is None:
-        raise ValueError('Job not found')
+    job = Job.query.get(job_id) if job_id else None
+    if job is None:
+        flash("Job not found", "danger")
+        return redirect(url_for("route_jobs.view_jobs"))
 
     waiting = {
         JobState.MANUAL_WAIT_STARTED.value,
@@ -122,16 +211,38 @@ def jobdetail():
         for entry in track_form.track_ref.entries:
             entry.checkbox.render_kw = {'disabled': 'disabled'}
 
-    search_results = ui_utils.metadata_selector("get_details", job.title, job.year, job.imdb_id)
-
-    if search_results and 'Error' not in search_results:
-        job.plot = search_results['Plot'] if 'Plot' in search_results else "There was a problem getting the plot"
-        job.background = search_results['background_url'] if 'background_url' in search_results else None
+    is_music = _is_music_job(job)
+    plot = None
+    extra_facts = []
+    if is_music:
+        from arm.ripper import music_brainz
+        album = music_brainz.release_details_for_ui(job.crc_id, job.arm_version)
+        extra_facts = _album_facts(job, album)
+        job.background = None
+        pipeline = music_pipeline()
+    else:
+        search_results = ui_utils.metadata_selector("get_details", job.title, job.year, job.imdb_id)
+        if search_results and "Error" not in search_results:
+            plot = search_results.get("Plot")
+            job.background = search_results.get("background_url")
+            extra_facts = _omdb_facts(search_results)
+        cfg_job = job.config
+        pipeline = movie_pipeline({
+            "SKIP_TRANSCODE": getattr(cfg_job, "SKIP_TRANSCODE", cfg.arm_config.get("SKIP_TRANSCODE")),
+            "MAINFEATURE": getattr(cfg_job, "MAINFEATURE", cfg.arm_config.get("MAINFEATURE")),
+            "RIPMETHOD": getattr(cfg_job, "RIPMETHOD", cfg.arm_config.get("RIPMETHOD")),
+            "MKV_LANG": cfg.arm_config.get("MKV_LANG"),
+            "USE_FFMPEG": getattr(cfg_job, "USE_FFMPEG", cfg.arm_config.get("USE_FFMPEG")),
+        })
 
     return render_template('jobdetail.html',
                            jobs=job,
                            tracks=tracks,
-                           s=search_results,
+                           is_music=is_music,
+                           plot=plot,
+                           extra_facts=extra_facts,
+                           pipeline=pipeline,
+                           format_track_length=format_track_length,
                            manual_edit=manual_edit,
                            form=track_form)
 
@@ -200,16 +311,12 @@ def customtitle():
     job = Job.query.get(job_id)
     form = TitleSearchForm(obj=job)
     if request.args.get("title"):
-        cleaned_title = ui_utils.clean_for_filename(request.args.get("title"))
+        cleaned_title = clean_for_filename(request.args.get("title"))
         args = {
             'title': cleaned_title,
             'title_manual': cleaned_title,
             'year': request.args.get("year")
         }
-        notification = Notifications(f"Job: {job.job_id} was updated",
-                                     f'Title: {job.title} ({job.year}) was updated to '
-                                     f'{request.args.get("title")} ({request.args.get("year")})')
-        db.session.add(notification)
         ui_utils.database_updater(args, job)
         flash(f'Custom title changed. Title={job.title}, Year={job.year}.', "success")
         return redirect(url_for('home'))
@@ -266,7 +373,7 @@ def updatetitle():
     app.logger.debug(f"Old Title and Year: {old_title}, {old_year}")
 
     app.logger.debug(f"New Title: {request.args.get('title')}")
-    new_title = ui_utils.clean_for_filename(request.args.get('title'))
+    new_title = clean_for_filename(request.args.get('title'))
     app.logger.debug(f"Cleaned New Title: {new_title}")
     job.title = job.title_manual = new_title
 
@@ -281,24 +388,10 @@ def updatetitle():
     job.poster_url = job.poster_url_manual = request.args.get('poster')
 
     job.hasnicetitle = True
-    notification = Notifications(f"Job: {job.job_id} was updated",
-                                 f'Title: {old_title} ({old_year}) was updated to '
-                                 f'{request.args.get("title")} ({request.args.get("year")})')
-    db.session.add(notification)
     db.session.commit()
     flash(f'Title: {old_title} ({old_year}) was updated to '
           f'{request.args.get("title")} ({request.args.get("year")})', "success")
     return redirect("/")
-
-
-@route_jobs.route('/activerips')
-@login_required
-def rips():
-    """
-    This no longer works properly because of the 'transcoding' status
-    """
-    active_jobs = Job.query.filter_by(~Job.finished)
-    return render_template('activerips.html', jobs=active_jobs)
 
 
 @route_jobs.route('/changeparams')
@@ -347,12 +440,10 @@ def list_titles():
 
 @route_jobs.route('/json', methods=['GET', 'POST'])
 def feed_json():
-    """
-    json mini API
-    This is used for all api/ajax calls this makes thing easier to read/code for
-    Adding a new function to the api is as simple as adding a new elif where GET[mode]
-    is your call
-    You can then add a function inside utils to deal with the request
+    """AJAX endpoint used by Home, History, and job-detail buttons.
+
+    mode= selects a handler in valid_modes (implemented in json_api or ui_utils).
+    Unauthenticated callers get 401 except where Flask-Login is disabled.
     """
     # Check if users is authenticated
     authenticated = ui_utils.authenticated_state()
@@ -361,7 +452,8 @@ def feed_json():
     status = 200
 
     if authenticated:
-        # Hold valid data (post/get data) we might receive from pages - not in here ? it's going to throw a key error
+        # Keys that handlers may request via valid_modes[mode]['args'].
+        # Missing keys raise KeyError, so add new query params here first.
         valid_data = {
             'j_id': request.values.get('job'),
             'searchq': request.values.get('q'),
@@ -371,9 +463,7 @@ def feed_json():
             'joblist': 'joblist',
             'mode': mode,
             'config_id': request.values.get('config_id'),
-            'notify_id': request.values.get('notify_id'),
             'track': request.values.get('track'),
-            'notify_timeout': {'funct': json_api.get_notify_timeout, 'args': ('notify_timeout',)},
         }
         # Valid modes that should trigger functions
         valid_modes = {
@@ -393,8 +483,6 @@ def feed_json():
             'joblist': {'funct': json_api.get_x_jobs, 'args': ('joblist',)},
             'send_item': {'funct': ui_utils.send_to_remote_db, 'args': ('j_id',)},
             'change_job_params': {'funct': json_api.change_job_params, 'args': ('config_id',)},
-            'read_notification': {'funct': json_api.read_notification, 'args': ('notify_id',)},
-            'notify_timeout': {'funct': json_api.get_notify_timeout, 'args': ('notify_timeout',)},
             'restart': {'funct': json_api.restart_ui, 'args': ()},
             'select_playlist': {'funct': json_api.select_playlist, 'args': ('j_id', 'track')},
         }
@@ -419,11 +507,6 @@ def feed_json():
     elif mode in valid_modes:
         args = [valid_data[x] for x in valid_modes[mode]['args']]
         return_json = valid_modes[mode]['funct'](*args)
-
-    if authenticated:
-        return_json['notes'] = json_api.get_notifications()
-    else:
-        return_json['notes'] = []
 
     # return JSON data
     return app.response_class(response=json.dumps(return_json, indent=4, sort_keys=True),

@@ -1,12 +1,19 @@
 {% from 'macros/settings.html' import setting_caption %}
 <section class="settings-section" id="apprise-config">
-    <h5>Apprise Config</h5>
-    <p>Send messages from ARM to multiple services at once using Apprise. Fill in the service you use, then point ARM at this file. In Docker the default path is <code>/etc/arm/config/apprise.yaml</code>.</p>
+    <h5>Apprise Tokens</h5>
+    <p class="text-muted">
+        Service tokens below are stored in the Apprise file, not arm.yaml.
+        Fill in the service you use. In Docker the default file is
+        <code>/etc/arm/config/apprise.yaml</code>.
+    </p>
     <a class="btn btn-primary mb-3" href="testapprise">Send Test Notification</a>
-    <form id="appriseCfg" name="appriseCfg" method="post" action="">
+    <form id="appriseCfg" name="appriseCfg" method="post" action=""
+          data-read-only="{{ '1' if apprise_read_only else '0' }}">
         {{ form.hidden_tag() }}
+        {% set ns = namespace(unused=0) %}
         {% for k, v in apprise_cfg.items() %}
-        <div class="setting-block">
+        {% if not v %}{% set ns.unused = ns.unused + 1 %}{% endif %}
+        <div class="setting-block{% if not v %} apprise-unused{% endif %}">
         <div class="input-group mb-1">
             {{ setting_caption(k, setting_label(k)) }}
             <input type="text" class="form-control" aria-label="{{ k }}" name="{{ k }}"
@@ -19,9 +26,13 @@
         </div>
         </div>
         {% endfor %}
-        <button id="apprise_cfg" class="btn btn-secondary btn-lg btn-block settings-save" form="appriseCfg"
-                type="submit"{% if apprise_read_only %} disabled{% endif %}>
-            Save Apprise Settings
-        </button>
+        {% if ns.unused %}
+        <p class="mb-0">
+            <button type="button" class="btn btn-link btn-sm px-0" id="appriseShowUnused"
+                    data-show-label="Show {{ ns.unused }} unused services">
+                Show {{ ns.unused }} unused services
+            </button>
+        </p>
+        {% endif %}
     </form>
 </section>

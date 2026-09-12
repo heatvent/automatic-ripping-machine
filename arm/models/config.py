@@ -41,7 +41,7 @@ class Config(db.Model):
     RIPMETHOD = db.Column(db.String(25))
     MKV_ARGS = db.Column(db.String(512))
     DELRAWFILES = db.Column(db.Boolean)
-    HASHEDKEYS = db.Column(db.Boolean)
+    HASHEDKEYS = db.Column(db.Boolean)  # unused leftover; do not drop without a migration
     HB_PRESET_DVD = db.Column(db.String(256))
     HB_PRESET_BD = db.Column(db.String(256))
     DEST_EXT = db.Column(db.String(10))

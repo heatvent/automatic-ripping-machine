@@ -67,9 +67,9 @@ SETTING_LABELS = {
     "HANDBRAKE_LOCAL": "Local HandBrake Program",
     "FFMPEG_PRE_FILE_ARGS": "Arguments Before Input",
     "FFMPEG_POST_FILE_ARGS": "Arguments After Input",
-    "FFMPEG_CLI": "Program",
-    "FFMPEG_LOCAL": "Local Program",
-    "USE_FFMPEG": "Use Instead of HandBrake",
+    "FFMPEG_CLI": "FFmpeg Program",
+    "FFMPEG_LOCAL": "Local FFmpeg Program",
+    "USE_FFMPEG": "Use FFmpeg Instead of HandBrake",
     "MAINFEATURE": "Main Title Only",
     "HB_ARGS_DVD": "Extra DVD Arguments",
     "HB_ARGS_BD": "Extra Blu-ray Arguments",
@@ -85,7 +85,7 @@ SETTING_LABELS = {
     "EMBY_API_KEY": "Emby API Key",
     "NOTIFY_RIP": "Notify When Rip Finishes",
     "NOTIFY_TRANSCODE": "Notify When Transcode Finishes",
-    "NOTIFY_JOBID": "Include Job ID in Notifications",
+    "NOTIFY_JOBID": "Include Job ID",
     "PB_KEY": "Pushbullet Key",
     "IFTTT_KEY": "IFTTT Key",
     "IFTTT_EVENT": "IFTTT Event Name",
@@ -98,13 +98,16 @@ SETTING_LABELS = {
     "APPRISE": "Apprise Config File",
     "index_refresh": "Home Refresh Interval (ms)",
     "database_limit": "History per Page",
+    # Unused leftover; hidden on the Web UI form. Label kept for comments.json.
     "notify_refresh": "Notification Display Time (ms)",
 }
 
 GENERAL_SETTING_GROUPS = (
-    ("general", "General", (
-        "ARM_NAME", "DISABLE_LOGIN", "DATE_FORMAT", "LOGLEVEL", "LOGLIFE",
-        "ARM_CHILDREN",
+    ("identity", "Identity", (
+        "ARM_NAME", "DISABLE_LOGIN", "DATE_FORMAT", "ARM_CHILDREN",
+    )),
+    ("logging", "Logging", (
+        "LOGLEVEL", "LOGLIFE",
     )),
     ("web", "Web Server", (
         "WEBSERVER_IP", "WEBSERVER_PORT", "UI_BASE_URL",
@@ -114,52 +117,97 @@ GENERAL_SETTING_GROUPS = (
         "CHOWN_USER", "CHOWN_GROUP",
     )),
     ("paths", "Install Paths", (
-        "LOGPATH", "DBFILE", "INSTALLPATH", "ABCDE_CONFIG_FILE",
+        "LOGPATH", "DBFILE", "INSTALLPATH",
     )),
 )
 
+SETTING_GROUP_INTROS = {
+    "identify": (
+        "Look up the disc title before MakeMKV starts."
+    ),
+    "tracks": (
+        "Which titles MakeMKV rips from a movie disc."
+    ),
+    "rip": (
+        "MakeMKV writes decrypted MKV files to Raw. The tray ejects when this finishes."
+    ),
+    "transcode": (
+        "Skip Transcoding copies Raw to Completed and does not run HandBrake or FFmpeg. "
+        "Max Concurrent Transcodes limits whichever encoder is used."
+    ),
+    "handbrake": (
+        "Used when Skip Transcoding is No and Use FFmpeg Instead of HandBrake is No."
+    ),
+    "ffmpeg": (
+        "Used only when Use FFmpeg Instead of HandBrake is Yes. Experimental. "
+        "Max Concurrent Transcodes still limits how many FFmpeg jobs run at once."
+    ),
+    "copy": (
+        "Final library folder. Keep Raw and Transcode on local disk; Completed can be a share."
+    ),
+}
+
 RIPPER_SETTING_GROUPS = (
-    ("general", "General", (
+    ("identify", "Identify", (
         "GET_VIDEO_TITLE", "VIDEOTYPE", "METADATA_PROVIDER", "OMDB_API_KEY",
-        "TMDB_API_KEY", "MINLENGTH", "MAXLENGTH", "MAINFEATURE", "MANUAL_WAIT", "MANUAL_WAIT_TIME",
-        "ALLOW_DUPLICATES", "AUTO_EJECT", "SKIP_TRANSCODE", "PREVENT_99",
-        "ARM_CHECK_UDF", "RIP_POSTER", "GET_AUDIO_TITLE", "DATA_RIP_PARAMETERS",
-        "ARM_API_KEY",
+        "TMDB_API_KEY", "ARM_API_KEY",
     )),
-    ("directories", "Directories", (
-        "RAW_PATH", "TRANSCODE_PATH", "COMPLETED_PATH", "EXTRAS_SUB",
+    ("tracks", "Tracks to Rip", (
+        "MINLENGTH", "MAXLENGTH", "MAINFEATURE", "PREVENT_99",
+        "ARM_CHECK_UDF", "RIP_POSTER", "DATA_RIP_PARAMETERS",
     )),
-    ("makemkv", "MakeMKV", (
-        "RIPMETHOD", "MAKEMKV_PERMA_KEY",
-        "MKV_LANG", "MKV_VIDEO", "MKV_AUDIO",
+    ("rip", "Rip with MakeMKV", (
+        "RIPMETHOD", "MKV_LANG", "MKV_VIDEO", "MKV_AUDIO",
         "MKV_INCLUDE_CORE", "MKV_EXCLUDE_COMMENTARY", "MKV_SUBTITLES",
-        "MKV_ARGS", "MAX_CONCURRENT_MAKEMKVINFO", "DELRAWFILES",
+        "MAKEMKV_PERMA_KEY", "MKV_ARGS", "MAX_CONCURRENT_MAKEMKVINFO", "DELRAWFILES",
+    )),
+    ("transcode", "Transcode", (
+        "SKIP_TRANSCODE", "MAX_CONCURRENT_TRANSCODES",
     )),
     ("handbrake", "HandBrake", (
         "HB_PRESET_DVD", "HB_PRESET_BD", "DEST_EXT",
         "HB_ARGS_DVD", "HB_ARGS_BD", "HANDBRAKE_CLI", "HANDBRAKE_LOCAL",
-        "MAX_CONCURRENT_TRANSCODES",
     )),
     ("ffmpeg", "FFmpeg", (
         "USE_FFMPEG", "FFMPEG_CLI", "FFMPEG_LOCAL",
         "FFMPEG_PRE_FILE_ARGS", "FFMPEG_POST_FILE_ARGS",
     )),
+    ("copy", "Copy to Library", (
+        "RAW_PATH", "TRANSCODE_PATH", "COMPLETED_PATH", "EXTRAS_SUB",
+    )),
+    ("flow", "Job Flow", (
+        "MANUAL_WAIT", "MANUAL_WAIT_TIME", "ALLOW_DUPLICATES", "AUTO_EJECT",
+    )),
 )
 
 NOTIFY_SETTING_GROUPS = (
-    ("notify", "General", (
-        "NOTIFY_RIP", "NOTIFY_TRANSCODE", "NOTIFY_JOBID", "PB_KEY",
-        "IFTTT_KEY", "IFTTT_EVENT", "PO_USER_KEY", "PO_APP_KEY",
-        "BASH_SCRIPT", "JSON_URL", "APPRISE",
+    ("when", "When to Notify", (
+        "NOTIFY_RIP", "NOTIFY_TRANSCODE", "NOTIFY_JOBID",
+    )),
+    ("ifttt", "IFTTT", (
+        "IFTTT_KEY", "IFTTT_EVENT",
+    )),
+    ("pushover", "Pushover", (
+        "PO_USER_KEY", "PO_APP_KEY",
+    )),
+    ("pushbullet", "Pushbullet", (
+        "PB_KEY",
+    )),
+    ("webhooks", "Script and Webhook", (
+        "BASH_SCRIPT", "JSON_URL",
     )),
     ("emby", "Emby", (
-        "EMBY_REFRESH", "EMBY_SERVER", "EMBY_PORT", "EMBY_USERNAME",
-        "EMBY_USERID", "EMBY_PASSWORD", "EMBY_API_KEY", "EMBY_CLIENT",
-        "EMBY_DEVICE", "EMBY_DEVICEID",
+        "EMBY_REFRESH", "EMBY_SERVER", "EMBY_PORT", "EMBY_API_KEY",
+        "EMBY_USERNAME", "EMBY_PASSWORD", "EMBY_USERID",
+        "EMBY_CLIENT", "EMBY_DEVICE", "EMBY_DEVICEID",
+    )),
+    ("apprise", "Apprise File", (
+        "APPRISE",
     )),
 )
 
 SETTING_GROUPS = GENERAL_SETTING_GROUPS + RIPPER_SETTING_GROUPS + NOTIFY_SETTING_GROUPS
+CD_RIPPER_YAML_KEYS = frozenset({"ABCDE_CONFIG_FILE", "GET_AUDIO_TITLE"})
 
 NONEMPTY_SETTING_KEYS = frozenset({
     "DATE_FORMAT", "HB_PRESET_DVD", "HB_PRESET_BD", "HANDBRAKE_CLI",
@@ -240,7 +288,8 @@ def page_setting_groups(settings):
             settings, GENERAL_SETTING_GROUPS, leftovers=False
         ),
         "ripper": grouped_setting_keys(
-            settings, RIPPER_SETTING_GROUPS, exclude_keys=general_keys | notify_keys
+            settings, RIPPER_SETTING_GROUPS,
+            exclude_keys=general_keys | notify_keys | CD_RIPPER_YAML_KEYS,
         ),
         "notify": grouped_setting_keys(
             settings, NOTIFY_SETTING_GROUPS, leftovers=False

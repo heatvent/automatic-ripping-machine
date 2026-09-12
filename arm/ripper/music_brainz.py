@@ -195,6 +195,7 @@ def check_musicbrainz_data(job, disc_info: dict) -> str:
                         'year_auto': str(new_year),
                         'title': artist_title,
                         'title_auto': artist_title,
+                        'video_type': 'Music',
                         'no_of_titles': no_of_titles
                     }
                     logging.info(f"CD args: {args}")
@@ -229,6 +230,7 @@ def check_musicbrainz_data(job, disc_info: dict) -> str:
             'year_auto': new_year,
             'title': artist_title,
             'title_auto': artist_title,
+            'video_type': 'Music',
             'no_of_titles': no_of_titles
         }
         logging.info(f"cdstub args: {args}")
@@ -442,6 +444,65 @@ def process_tracks(job, mb_track_list: dict, is_stub=False):
         else:
             title = track['recording']['title']
         u.put_track(job, trackno, track_leng, "n/a", 0.1, False, "ABCDE", title)
+
+
+_RELEASE_MBID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def release_details_for_ui(mbid, arm_version="unknown"):
+    """Look up a MusicBrainz release for the job-detail page.
+
+    For audio CDs, job.crc_id is a MusicBrainz release UUID, not a DVD CRC64.
+    CD stubs never get a UUID, so this returns None and the page falls back to
+    whatever ARM already stored on the job. Barcode and catalog number come from
+    the release, not OMDb/IMDb.
+    """
+    if not mbid or not _RELEASE_MBID.match(str(mbid)):
+        return None
+    try:
+        mb.set_useragent(
+            "arm",
+            version=str(arm_version or "unknown"),
+            contact="https://github.com/automatic-ripping-machine",
+        )
+        info = mb.get_release_by_id(
+            mbid, includes=["artists", "labels", "release-groups"]
+        )
+    except mb.WebServiceError:
+        logging.debug("MusicBrainz release lookup failed for %s", mbid, exc_info=True)
+        return None
+    release = info.get("release") or {}
+    artist = ""
+    credit = release.get("artist-credit") or []
+    if credit:
+        artist = (credit[0].get("artist") or {}).get("name") or credit[0].get("name") or ""
+    labels = []
+    catalogs = []
+    for item in release.get("label-info-list") or []:
+        name = (item.get("label") or {}).get("name")
+        if name and name not in labels:
+            labels.append(name)
+        catalog = (item.get("catalog-number") or "").strip()
+        if catalog and catalog not in catalogs:
+            catalogs.append(catalog)
+    release_group = release.get("release-group") or {}
+    date = str(release.get("date") or "")
+    barcode = str(release.get("barcode") or "").strip()
+    return {
+        "artist": artist,
+        "album": release.get("title") or "",
+        "year": date[:4] if date else "",
+        "label": ", ".join(labels),
+        "barcode": barcode,
+        "catalog": ", ".join(catalogs),
+        "country": release.get("country") or "",
+        "status": release.get("status") or "",
+        "primary_type": release_group.get("primary-type") or "",
+        "mbid": mbid,
+        "url": f"https://musicbrainz.org/release/{mbid}",
+    }
 
 
 if __name__ == "__main__":

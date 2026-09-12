@@ -1,0 +1,77 @@
+{% block maintenance %}
+    <div class="tab-pane pt-5" id="maintenance" role="tabpanel" aria-labelledby="maintenance-tab">
+        <nav class="settings-toc" aria-label="Maintenance sections">
+            <a href="#maintenance-backup">Backup and Restore</a>
+            <a href="#maintenance-jobs">Jobs</a>
+        </nav>
+
+        <p class="maintenance-copy">
+            A backup zip contains your ARM config files and the job database.
+            Ripped media files are not included.
+        </p>
+        <div class="maintenance-stats" aria-label="Database counts">
+            <span>Jobs: <strong>{{ maintenance_stats.total }}</strong></span>
+            <span>Failed: <strong>{{ maintenance_stats.failed }}</strong></span>
+            <span>In progress: <strong>{{ maintenance_stats.unfinished }}</strong></span>
+        </div>
+
+        <section class="settings-section" id="maintenance-backup">
+            <h5>Backup and Restore</h5>
+            <p class="maintenance-copy">
+                Download a zip you can keep off this machine, then restore it later from this tab.
+                Restore replaces configuration and job history, then asks the web UI to restart.
+                It is blocked while a rip or transcode is running.
+            </p>
+            <div class="maintenance-actions">
+                <a class="btn btn-secondary" href="{{ url_for('route_settings.download_backup') }}">
+                    Download backup zip
+                </a>
+            </div>
+            <form class="maintenance-restore" method="post"
+                  action="{{ url_for('route_settings.restore_backup') }}"
+                  enctype="multipart/form-data">
+                {{ restore_form.hidden_tag() }}
+                <label class="sr-only" for="backup_file">Backup zip</label>
+                <input class="form-control" id="backup_file" name="backup_file" type="file"
+                       accept=".zip,application/zip">
+                <button class="btn btn-secondary" type="submit"
+                        {% if maintenance_stats.unfinished %}disabled{% endif %}>
+                    Restore backup
+                </button>
+            </form>
+            {% if maintenance_stats.unfinished %}
+                <p class="maintenance-warn">Restore is unavailable until in-progress jobs finish.</p>
+            {% endif %}
+        </section>
+
+        <section class="settings-section" id="maintenance-jobs">
+            <h5>Jobs</h5>
+            <p class="maintenance-copy">
+                These actions remove rows from the database. They do not delete ripped files
+                on disk. In-progress rips are left alone.
+            </p>
+            <form method="post" action="{{ url_for('route_settings.maintenance_action') }}"
+                  onsubmit="return confirm('Delete all failed jobs from the database?');">
+                {{ form.hidden_tag() }}
+                <input type="hidden" name="action" value="failed">
+                <button class="btn btn-danger" type="submit"
+                        {% if not maintenance_stats.failed %}disabled{% endif %}>
+                    Delete {{ maintenance_stats.failed }} failed job{{ 's' if maintenance_stats.failed != 1 else '' }}
+                </button>
+            </form>
+            <form class="maintenance-delete-all" method="post"
+                  action="{{ url_for('route_settings.maintenance_action') }}"
+                  onsubmit="return confirm('This cannot be undone. Delete all finished jobs?');">
+                {{ form.hidden_tag() }}
+                <input type="hidden" name="action" value="all">
+                <label class="sr-only" for="deleteAllConfirm">Type DELETE to confirm</label>
+                <input class="form-control maintenance-confirm" id="deleteAllConfirm"
+                       name="confirm_text" placeholder="Type DELETE" autocomplete="off">
+                <button class="btn btn-danger" type="submit"
+                        {% if not maintenance_stats.finished %}disabled{% endif %}>
+                    Delete all finished jobs
+                </button>
+            </form>
+        </section>
+    </div>
+{% endblock %}

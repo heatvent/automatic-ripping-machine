@@ -1,6 +1,4 @@
-"""
-Main catch all page for functions for the A.R.M ui
-"""
+"""Helpers shared by ARM UI blueprints: DB migrate, settings files, job lookup."""
 import hashlib
 import ipaddress
 import os
@@ -34,6 +32,7 @@ from arm.models.job import Job
 from arm.models.system_info import SystemInfo
 from arm.models.ui_settings import UISettings
 from arm.models.user import User
+from arm.title_format import clean_for_filename  # noqa: F401
 from arm.ui import app, db
 from arm.ui.metadata import tmdb_search, get_tmdb_poster, tmdb_find, call_omdb_api
 from arm.ui.settings import DriveUtils
@@ -331,14 +330,6 @@ def get_info(directory):
     return file_list
 
 
-def getsize(path):
-    """Simple function to get the free space left in a path"""
-    path_stats = os.statvfs(path)
-    free = (path_stats.f_bavail * path_stats.f_frsize)
-    free_gb = free / 1073741824
-    return free_gb
-
-
 def generate_comments():
     """
     load comments.json and use it for settings page
@@ -621,23 +612,6 @@ def find_folder_in_log(job_log, default_directory):
     return default_directory
 
 
-def trigger_restart():
-    """
-    We update the file modified time to get flask to restart
-    This only works if ARMui is running as a service & in debug mode
-
-    notes: This has been removed, breaks and causes errors when run as 'arm' user
-    """
-
-    def set_file_last_modified(file_path, date_time):
-        dt_epoch = date_time.timestamp()
-        os.utime(file_path, (dt_epoch, dt_epoch))
-
-    now = datetime.now()
-    arm_main = os.path.join(os.path.dirname(os.path.abspath(__file__)), "routes.py")
-    set_file_last_modified(arm_main, now)
-
-
 def build_arm_cfg(form_data, comments):
     """
     Main function for saving new updated arm.yaml\n
@@ -876,18 +850,6 @@ def get_git_revision_hash() -> str:
         # Trunkate to seven characters (aligns with the github commit values reported)
         git_hash = git_hash[:7]
         app.logger.debug(f"GIT revision: {git_hash}")
-    except subprocess.CalledProcessError as e:
-        app.logger.debug(f"GIT revision error: {e}")
-
-    return git_hash
-
-
-def get_git_revision_short_hash() -> str:
-    """Get short hash of current git commit"""
-    git_hash: str = 'unknown'
-    try:
-        subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'],
-                                cwd=cfg.arm_config['INSTALLPATH']).decode('ascii').strip()
     except subprocess.CalledProcessError as e:
         app.logger.debug(f"GIT revision error: {e}")
 

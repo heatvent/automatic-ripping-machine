@@ -1,9 +1,11 @@
 {% block ui %}
     {% from 'macros/icons.html' import info_icon %}
     {% from 'macros/settings.html' import setting_caption, setting_info %}
-    <div class="tab-pane pt-5" id="uiSettingsTab" role="tabpanel" aria-labelledby="uiSettings-tab">
+    <section class="settings-section" id="general-web-ui">
+        <h5>Web UI</h5>
         <form id="uiSettings" name="uiSettings" action="" novalidate>
             {{ form.hidden_tag() }}
+            {# Leftover DB column from toasts. Keep posting it so UiSettingsForm still validates. #}
             <input type="hidden" name="notify_refresh" value="{{ ui_settings.notify_refresh }}">
             <div class="setting-block">
             <div class="input-group mb-1">
@@ -25,10 +27,6 @@
             </div>
             <div class="invalid-feedback setting-error" data-error-for="database_limit" hidden></div>
             </div>
-            <button id="uiSubmit" class="btn btn-secondary btn-lg btn-block settings-save" form="uiSettings"
-                    type="submit">
-                Save UI Settings
-            </button>
         </form>
-    </div>
+    </section>
 {% endblock %}

@@ -5,9 +5,13 @@
             {% for group_id, group_title, group_keys in notify_setting_groups %}
             <a href="#notify-{{ group_id }}">{{ group_title }}</a>
             {% endfor %}
-            <a href="#apprise-config">Apprise Config</a>
+            <a href="#apprise-config">Apprise Tokens</a>
         </nav>
-        {{ yaml_settings_form('notifySettings', notify_setting_groups, 'Save Notification Settings', ripper_read_only, 'notify') }}
+        {{ yaml_settings_form('notifySettings', notify_setting_groups, 'Save Notification Settings', ripper_read_only, 'notify', false) }}
         {% include 'settings/apprise.html' %}
+        <button class="btn btn-secondary btn-lg btn-block settings-save" id="notifySaveAll" type="button"
+                {% if ripper_read_only and apprise_read_only %}disabled{% endif %}>
+            Save Notification Settings
+        </button>
     </div>
 {% endblock %}

@@ -1,21 +1,7 @@
-"""
-ARM route blueprint for settings pages
-Covers
-- settings [GET]
-- system [GET]
-- save_settings [POST]
-- save_ui_settings [POST]
-- save_abcde_settings [POST]
-- save_apprise_cfg [POST]
-- systeminfo [POST]
-- systemdrivescan [GET]
-- update_arm [POST]
-- drive_eject [GET]
-- drive_open [GET]
-- drive_close [GET]
-- drive_remove [GET]
-- testapprise [GET]
-- updatesysinfo [GET]
+"""Settings UI: grouped yaml forms, Apprise, drives, backup/restore, sysinfo.
+
+Notifications tab is outbound Apprise/device config, not an in-app inbox.
+Old /notificationview URLs redirect here.
 """
 import platform
 import importlib
@@ -23,6 +9,7 @@ import re
 import subprocess
 from datetime import datetime
 import os
+import tempfile
 import time
 
 import sqlalchemy
@@ -30,7 +17,7 @@ import sqlalchemy
 from flask_login import login_required, \
     current_user, login_user, UserMixin, logout_user  # noqa: F401
 from flask import render_template, request, flash, \
-    redirect, Blueprint, session, url_for
+    redirect, Blueprint, session, url_for, send_file
 
 import arm.ui.utils as ui_utils
 from arm.config.path_health import media_path_health
@@ -54,6 +41,7 @@ from arm.config.makemkv_select import apply_default_selection
 from arm.ui.settings.setting_meta import (
     INTEGER_SETTING_KEYS,
     PORT_SETTING_KEYS,
+    SETTING_GROUP_INTROS,
     SETTING_LABELS,
     format_setting_help,
     page_setting_groups,
@@ -63,11 +51,15 @@ from arm.ui.settings.setting_meta import (
 )
 from arm.ui.settings.abcde_utils import (
     abcde_fields_for_ui,
+    abcde_groups_for_ui,
     apply_abcde_updates,
     validate_abcde_form,
 )
-from arm.ui.forms import SettingsForm, UiSettingsForm, AbcdeForm, SystemInfoDrives
+from arm.ui.forms import SettingsForm, UiSettingsForm, AbcdeForm, SystemInfoDrives, \
+    RestoreBackupForm, MaintenanceActionForm
 from arm.ui.settings.ServerUtil import ServerUtil
+from arm.ui.settings import maintenance as maint
+from arm.ui.settings.backup_zip import BackupError
 import arm.ripper.utils as ripper_utils
 
 route_settings = Blueprint('route_settings', __name__,
@@ -78,6 +70,14 @@ REDIRECT_SETTINGS = "route_settings.settings"
 
 def redirect_to_settings_tab(tab="drives"):
     return redirect(url_for(REDIRECT_SETTINGS) + f"#{tab}")
+
+
+def _drive_action_redirect():
+    """Stay on Home when tray actions are started from there."""
+    next_page = (request.args.get("next") or "").strip()
+    if next_page in {"/", "/index", "/index.html"}:
+        return redirect(url_for("home"))
+    return redirect_to_settings_tab()
 
 
 def is_read_only(path: os.PathLike) -> bool:
@@ -184,8 +184,10 @@ def settings():
     # Load up the comments.json, so we can comment the arm.yaml
     comments = ui_utils.generate_comments()
     form = SettingsForm()
+    restore_form = RestoreBackupForm()
     pages = page_setting_groups(cfg.arm_config)
     system_context = _system_page_context()
+    maintenance_restart = session.pop("maintenance_restart", False)
 
     session["page_title"] = "Settings"
 
@@ -213,11 +215,24 @@ def settings():
                            port_setting_keys=PORT_SETTING_KEYS,
                            setting_labels=SETTING_LABELS,
                            setting_label=setting_label,
+                           setting_group_intros=SETTING_GROUP_INTROS,
                            general_setting_groups=pages["general"],
                            ripper_setting_groups=pages["ripper"],
                            notify_setting_groups=pages["notify"],
                            abcde_fields=abcde_fields_for_ui(cfg.abcde_config),
+                           abcde_groups=abcde_groups_for_ui(cfg.abcde_config),
+                           restore_form=restore_form,
+                           maintenance_stats=maint.job_stats(),
+                           maintenance_restart=maintenance_restart,
                            **system_context)
+
+
+@route_settings.route('/notificationview')
+@route_settings.route('/notificationclose')
+@login_required
+def notificationview_redirect():
+    """Old /notificationview bookmarks → Settings → Notifications (Apprise)."""
+    return redirect_to_settings_tab("notifications")
 
 
 _HW_TRANSCODE_CACHE = {"ts": 0.0, "status": None}
@@ -225,6 +240,10 @@ _HW_TRANSCODE_CACHE_TTL = 3600
 
 
 def check_hw_transcode_support():
+    """Probe HandBrake once an hour for NVENC / QSV / VCN.
+
+    SKIP_TRANSCODE skips the probe entirely. Result is cached in-process.
+    """
     if yaml_is_true(cfg.arm_config.get("SKIP_TRANSCODE")):
         return {"nvidia": False, "intel": False, "amd": False, "skipped": True}
 
@@ -336,10 +355,9 @@ def save_settings():
 @route_settings.route('/save_ui_settings', methods=['POST'])
 @login_required
 def save_ui_settings():
-    """
-    Page - save_ui_settings
-    Method - POST
-    Overview - Save 'UI Settings' page settings to database. Not a user page
+    """Save Settings → General → Web UI (index_refresh, database_limit).
+
+    notify_refresh is written back from the hidden field; it is not shown.
     """
     form = UiSettingsForm()
     success = False
@@ -372,6 +390,137 @@ def save_ui_settings():
     }
 
 
+@route_settings.route('/backup')
+@login_required
+def download_backup():
+    """Download a zip of ARM config files and the job database."""
+    try:
+        buf, filename = maint.make_backup_zip()
+    except BackupError as err:
+        flash(str(err), "danger")
+        return redirect_to_settings_tab("maintenance")
+    except OSError as err:
+        app.logger.error("Backup failed", exc_info=err)
+        flash("Could not create the backup zip.", "danger")
+        return redirect_to_settings_tab("maintenance")
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@route_settings.route('/restore_backup', methods=['POST'])
+@login_required
+def restore_backup():
+    """Replace config files and the database from an uploaded backup zip."""
+    form = RestoreBackupForm()
+    if not form.validate_on_submit():
+        flash("Could not restore the backup.", "danger")
+        return redirect_to_settings_tab("maintenance")
+    upload = request.files.get("backup_file")
+    if not upload or not upload.filename:
+        flash("Choose a backup zip to restore.", "danger")
+        return redirect_to_settings_tab("maintenance")
+    try:
+        with tempfile.TemporaryDirectory(prefix="arm-restore-") as tmp:
+            zip_path = os.path.join(tmp, "upload.zip")
+            upload.save(zip_path)
+            maint.restore_backup_zip(zip_path, os.path.join(tmp, "extracted"))
+        importlib.reload(cfg)
+        session["maintenance_restart"] = True
+        flash(
+            "Backup restored. Restart the web UI to load the restored data.",
+            "success",
+        )
+    except BackupError as err:
+        flash(str(err), "danger")
+    except OSError as err:
+        app.logger.error("Restore failed", exc_info=err)
+        flash("Could not restore the backup zip.", "danger")
+    return redirect_to_settings_tab("maintenance")
+
+
+@route_settings.route('/maintenance_action', methods=['POST'])
+@login_required
+def maintenance_action():
+    """Delete failed jobs or finished jobs."""
+    form = MaintenanceActionForm()
+    if not form.validate_on_submit():
+        flash("Could not run that maintenance action.", "danger")
+        return redirect_to_settings_tab("maintenance")
+    action = (form.action.data or "").strip()
+    try:
+        if action in ("failed", "all"):
+            if action == "all" and (form.confirm_text.data or "").strip() != "DELETE":
+                flash('Type DELETE to remove all finished jobs.', "danger")
+                return redirect_to_settings_tab("maintenance")
+            deleted, skipped = maint.delete_jobs(action)
+            if action == "failed":
+                flash(f"Deleted {deleted} failed job(s).", "success")
+            else:
+                message = f"Deleted {deleted} finished job(s)."
+                if skipped:
+                    message += f" Skipped {skipped} in-progress job(s)."
+                flash(message, "success")
+        else:
+            flash("Unknown maintenance action.", "danger")
+    except BackupError as err:
+        flash(str(err), "danger")
+    except Exception as err:  # noqa: BLE001
+        db.session.rollback()
+        app.logger.error("Maintenance action failed", exc_info=err)
+        flash("That maintenance action failed. See the log.", "danger")
+    return redirect_to_settings_tab("maintenance")
+
+
+def _save_cd_yaml_fields(form_data):
+    """Write CD Ripper arm.yaml keys (config path and MusicBrainz job titles).
+
+    Album Lookup in the UI is CDDBMETHOD in abcde.conf. ARM always names CD
+    jobs from MusicBrainz so Home is not left untitled.
+
+    Returns {field: error} when a value is invalid or arm.yaml is read-only.
+    """
+    errors = {}
+    updates = {}
+    new_path = form_data.get("ABCDE_CONFIG_FILE")
+    if new_path is not None:
+        new_path = str(new_path).strip()
+        if not new_path:
+            errors["ABCDE_CONFIG_FILE"] = "Enter a file path."
+        elif new_path != str(cfg.arm_config.get("ABCDE_CONFIG_FILE") or ""):
+            updates["ABCDE_CONFIG_FILE"] = new_path
+    current_audio = str(cfg.arm_config.get("GET_AUDIO_TITLE") or "")
+    if current_audio != "musicbrainz":
+        updates["GET_AUDIO_TITLE"] = "musicbrainz"
+    if errors or not updates:
+        return errors
+    comments = ui_utils.generate_comments()
+    try:
+        arm_cfg = ui_utils.build_arm_cfg(updates, comments)
+        with open(cfg.arm_config_path, "w") as settings_file:
+            settings_file.write(arm_cfg)
+        importlib.reload(cfg)
+    except OSError:
+        message = "arm.yaml is read-only."
+        if "ABCDE_CONFIG_FILE" in updates:
+            errors["ABCDE_CONFIG_FILE"] = message
+        if "GET_AUDIO_TITLE" in updates:
+            errors["GET_AUDIO_TITLE"] = message
+    return errors
+
+
+def _save_abcde_config_path(new_path):
+    """Write ABCDE_CONFIG_FILE to arm.yaml when the CD Ripper path changes.
+
+    Returns an error string, or None when unchanged or saved.
+    """
+    errors = _save_cd_yaml_fields({"ABCDE_CONFIG_FILE": new_path})
+    return errors.get("ABCDE_CONFIG_FILE")
+
+
 @route_settings.route('/save_abcde_settings', methods=['POST'])
 @login_required
 def save_abcde():
@@ -385,6 +534,8 @@ def save_abcde():
     form = AbcdeForm()
     if form.validate_on_submit():
         errors = validate_abcde_form(request.form)
+        if not errors:
+            errors.update(_save_cd_yaml_fields(request.form))
         if errors:
             return {
                 'success': False,
@@ -511,7 +662,7 @@ def _drive_tray_action(drive_id, method):
     except sqlalchemy.exc.NoResultFound as err:
         app.logger.error(f"Drive tray action encountered an error: {err}")
         flash(f"Cannot find drive {drive_id} in database.", "error")
-        return redirect_to_settings_tab()
+        return _drive_action_redirect()
     labels = {"eject": "Opened the tray.", "close": "Closed the tray.", "toggle": "Toggled the tray."}
     if (error := drive.eject(method=method)) is not None:
         flash(error, "error")
@@ -522,7 +673,7 @@ def _drive_tray_action(drive_id, method):
     except Exception as err:  # noqa: BLE001
         app.logger.error(f"Unable to save drive state after tray action: {err}")
         db.session.rollback()
-    return redirect_to_settings_tab()
+    return _drive_action_redirect()
 
 
 @route_settings.route('/drive/remove/<remove_id>')

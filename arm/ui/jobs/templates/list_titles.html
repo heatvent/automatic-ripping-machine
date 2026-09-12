@@ -39,7 +39,7 @@
                         <div class="card text-center">
                             <div class="card-header">
                                 <a href="gettitle?imdbID={{ res["imdbID"] }}&job_id={{ job_id }}">
-                                  <img src="{{ res["Poster"] }}" width="120px" class="img-thumbnail" alt="Poster image">
+                                  <span class="job-cover job-cover-lg"><img src="{{ res["Poster"] }}" alt="Poster image"></span>
                                 </a>
                             </div>
                             <div class="card-body"><strong>{{ res["Title"] }}</strong> - {{ res["Type"].capitalize() }}

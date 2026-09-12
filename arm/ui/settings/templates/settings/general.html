@@ -5,7 +5,12 @@
             {% for group_id, group_title, group_keys in general_setting_groups %}
             <a href="#general-{{ group_id }}">{{ group_title }}</a>
             {% endfor %}
+            <a href="#general-web-ui">Web UI</a>
         </nav>
-        {{ yaml_settings_form('generalSettings', general_setting_groups, 'Save General Settings', ripper_read_only, 'general') }}
+        {{ yaml_settings_form('generalSettings', general_setting_groups, 'Save General Settings', ripper_read_only, 'general', false) }}
+        {% include 'settings/ui.html' %}
+        <button class="btn btn-secondary btn-lg btn-block settings-save" id="generalSaveAll" type="button">
+            Save General Settings
+        </button>
     </div>
 {% endblock %}

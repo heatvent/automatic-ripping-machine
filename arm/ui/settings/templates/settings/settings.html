@@ -29,10 +29,6 @@
                                aria-controls="general" aria-selected="true">General</a>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="sysinfo-tab" data-toggle="tab" href="#sysinfo" role="tab"
-                               aria-controls="sysinfo" aria-selected="false">System Information</a>
-                        </li>
-                        <li class="nav-item" role="presentation">
                             <a class="nav-link" id="drives-tab" data-toggle="tab" href="#drives" role="tab"
                                aria-controls="drives" aria-selected="false">Disk Drives</a>
                         </li>
@@ -49,21 +45,24 @@
                                aria-controls="notifications" aria-selected="false">Notifications</a>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="uiSettingsTab-tab" data-toggle="tab" href="#uiSettingsTab"
-                               role="tab"
-                               aria-controls="uiSettingsTab" aria-selected="false">UI Settings</a>
+                            <a class="nav-link" id="maintenance-tab" data-toggle="tab" href="#maintenance" role="tab"
+                               aria-controls="maintenance" aria-selected="false">Maintenance</a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="sysinfo-tab" data-toggle="tab" href="#sysinfo" role="tab"
+                               aria-controls="sysinfo" aria-selected="false">System Information</a>
                         </li>
                     </ul>
 
                     <!-- Tab Panes -->
                     <div class="tab-content">
                         {% include 'settings/general.html' %}
-                        {% include 'settings/system.html' %}
                         {% include 'settings/disk_drives.html' %}
                         {% include 'settings/ripper.html' %}
                         {% include 'settings/abcde.html' %}
                         {% include 'settings/notify.html' %}
-                        {% include 'settings/ui.html' %}
+                        {% include 'settings/maintenance.html' %}
+                        {% include 'settings/system.html' %}
                     </div>
                 </div>
             </div>
@@ -88,7 +87,28 @@
                 });
             }
 
-            function sendSettings(formToSend, sendTo) {
+            function showSaveSuccess(data) {
+                $("#success").removeClass("d-none");
+                $("#fail").addClass("d-none");
+                window.setTimeout(function () {
+                    $("#success").addClass("d-none");
+                }, 4000);
+                if (data && data.restart_needed && typeof window.showUiActionBanner === "function") {
+                    window.showUiActionBanner("restart");
+                } else if (data && data.reload_needed && typeof window.showUiActionBanner === "function") {
+                    window.showUiActionBanner("reload");
+                }
+            }
+
+            function showSaveFail(formToSend, data) {
+                $("#fail").removeClass("d-none");
+                $("#success").addClass("d-none");
+                if (formToSend) {
+                    showSettingErrors(formToSend, data && data.errors);
+                }
+            }
+
+            function sendSettings(formToSend, sendTo, onSuccess) {
                 clearSettingErrors(formToSend);
                 var formEl = formToSend.get(0);
                 if (formEl && typeof formEl.checkValidity === "function" && !formEl.checkValidity()) {
@@ -105,20 +125,13 @@
                     data: formToSend.serialize()
                 }).done(function (data) {
                     if (data.success === true) {
-                        $("#success").removeClass("d-none");
-                        $("#fail").addClass("d-none");
-                        window.setTimeout(function () {
-                            $("#success").addClass("d-none");
-                        }, 4000);
-                        if (data.restart_needed && typeof window.showUiActionBanner === "function") {
-                            window.showUiActionBanner("restart");
-                        } else if (data.reload_needed && typeof window.showUiActionBanner === "function") {
-                            window.showUiActionBanner("reload");
+                        if (typeof onSuccess === "function") {
+                            onSuccess(data);
+                            return;
                         }
+                        showSaveSuccess(data);
                     } else {
-                        $("#fail").removeClass("d-none");
-                        $("#success").addClass("d-none");
-                        showSettingErrors(formToSend, data.errors);
+                        showSaveFail(formToSend, data);
                     }
                 }).fail(function () {
                     $("#fail").removeClass("d-none");
@@ -126,34 +139,75 @@
                 });
             }
 
-            $("#uiSettings").submit(function (e) {
+            function mergeSaveFlags(first, second) {
+                return {
+                    restart_needed: Boolean(first && first.restart_needed) ||
+                        Boolean(second && second.restart_needed),
+                    reload_needed: Boolean(first && first.reload_needed) ||
+                        Boolean(second && second.reload_needed)
+                };
+            }
+
+            function formIsEffectivelyDisabled(formToSend) {
+                var $form = $(formToSend);
+                if (!$form.length) {
+                    return true;
+                }
+                if (String($form.data("read-only")) === "1") {
+                    return true;
+                }
+                return $form.find(":input").filter(function () {
+                    return this.name && this.name !== "csrf_token" && !this.disabled;
+                }).length === 0;
+            }
+
+            function saveGeneralTab(e) {
                 e.preventDefault();
-                sendSettings($("#uiSettings"), "/save_ui_settings");
-            });
-            $("#generalSettings").submit(function (e) {
+                var yamlForm = $("#generalSettings");
+                var saveUi = function (yamlData) {
+                    sendSettings($("#uiSettings"), "/save_ui_settings", function (uiData) {
+                        showSaveSuccess(mergeSaveFlags(yamlData, uiData));
+                    });
+                };
+                if (formIsEffectivelyDisabled(yamlForm)) {
+                    saveUi({});
+                    return;
+                }
+                sendSettings(yamlForm, "/save_settings", saveUi);
+            }
+
+            function saveNotifyTab(e) {
                 e.preventDefault();
-                sendSettings($("#generalSettings"), "/save_settings");
-            });
+                var yamlForm = $("#notifySettings");
+                var saveApprise = function (yamlData) {
+                    var appriseForm = $("#appriseCfg");
+                    if (formIsEffectivelyDisabled(appriseForm)) {
+                        showSaveSuccess(yamlData);
+                        return;
+                    }
+                    sendSettings(appriseForm, "/save_apprise_cfg", function (appriseData) {
+                        showSaveSuccess(mergeSaveFlags(yamlData, appriseData));
+                    });
+                };
+                if (formIsEffectivelyDisabled(yamlForm)) {
+                    saveApprise({});
+                    return;
+                }
+                sendSettings(yamlForm, "/save_settings", saveApprise);
+            }
+
+            $("#generalSaveAll").on("click", saveGeneralTab);
+            $("#generalSettings, #uiSettings").submit(saveGeneralTab);
             $("#ripperSettings").submit(function (e) {
                 e.preventDefault();
                 sendSettings($("#ripperSettings"), "/save_settings");
             });
-            $("#notifySettings").submit(function (e) {
-                e.preventDefault();
-                sendSettings($("#notifySettings"), "/save_settings");
-            });
+            $("#notifySaveAll").on("click", saveNotifyTab);
+            $("#notifySettings, #appriseCfg").submit(saveNotifyTab);
             $("#abcdeSettings").submit(function (e) {
                 e.preventDefault();
                 sendSettings($("#abcdeSettings"), "/save_abcde_settings");
             });
-            $("#appriseCfg").submit(function (e) {
-                e.preventDefault();
-                sendSettings($("#appriseCfg"), "/save_apprise_cfg");
-            });
-            $("#updateArm").submit(function (e) {
-                e.preventDefault();
-                sendSettings($("#updateArm"), "/update_arm")
-            })
             $(".popovers").popover({
                 trigger: "hover",
                 html: true,
@@ -169,22 +223,75 @@
                 if (hash === "#system") {
                     hash = "#sysinfo";
                 }
+                if (hash === "#uiSettingsTab" || hash === "#uiSettings") {
+                    hash = "#general";
+                }
+                if (hash === "#notify-notify") {
+                    hash = "#notify-when";
+                }
+                if (hash === "#ripper-general" || hash === "#ripper-titles") {
+                    hash = "#ripper-identify";
+                }
+                if (hash === "#ripper-selection") {
+                    hash = "#ripper-tracks";
+                }
+                if (hash === "#ripper-makemkv") {
+                    hash = "#ripper-rip";
+                }
+                if (hash === "#ripper-directories") {
+                    hash = "#ripper-copy";
+                }
+                if (hash === "#general-general") {
+                    hash = "#general-identity";
+                }
+                if (hash === "#abcde-lookup") {
+                    hash = "#abcde-jobs";
+                }
                 if (!hash) {
                     return;
                 }
-                var tab = $("#myTab a[href='" + hash + "']");
+                var tabHref = hash;
+                if (!$("#myTab a[href='" + hash + "']").length) {
+                    if (hash.indexOf("#notify-") === 0 || hash === "#apprise-config") {
+                        tabHref = "#notifications";
+                    } else if (hash.indexOf("#ripper-") === 0) {
+                        tabHref = "#ripper";
+                    } else if (hash.indexOf("#abcde-") === 0) {
+                        tabHref = "#abcde";
+                    } else if (hash.indexOf("#general-") === 0) {
+                        tabHref = "#general";
+                    } else if (hash.indexOf("#maintenance-") === 0) {
+                        tabHref = "#maintenance";
+                    } else if (hash.indexOf("#sys-") === 0 || hash === "#software-versions") {
+                        tabHref = "#sysinfo";
+                    }
+                }
+                var tab = $("#myTab a[href='" + tabHref + "']");
                 if (tab.length) {
                     tab.tab("show");
                 }
             }
             showSettingsTabFromHash();
             $(window).on("hashchange", showSettingsTabFromHash);
+            $("#appriseShowUnused").on("click", function () {
+                var form = document.getElementById("appriseCfg");
+                if (!form) {
+                    return;
+                }
+                var shown = form.classList.toggle("show-unused");
+                this.textContent = shown ? "Hide unused services" : this.getAttribute("data-show-label");
+            });
             $("#myTab a[data-toggle='tab']").on("shown.bs.tab", function (e) {
                 var href = e.target.getAttribute("href");
                 if (href && history.replaceState) {
                     history.replaceState(null, null, href);
                 }
             });
+            {% if maintenance_restart %}
+                if (typeof window.showUiActionBanner === "function") {
+                    window.showUiActionBanner("restart");
+                }
+            {% endif %}
         });
     </script>
 {% endblock %}

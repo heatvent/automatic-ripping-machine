@@ -50,7 +50,7 @@
                     {% with pages=pages, page_name="route_jobs.view_jobs" %}
                         {% include "pagination.html" %}
                     {% endwith %}
-                    <div class="row">
+                    <div class="jobs-table-wrap">
                         <table class="table table-striped" id="jobsTable">
                             <caption>Previous rips — open a log from the rip it belongs to</caption>
                             <thead class="tablesorterhead thead-dark">
@@ -67,23 +67,37 @@
                             {% from 'macros/icons.html' import status_badge %}
                             {% for job in jobs %}
                             <tr id="job-row-{{ job.job_id }}">
-                                <th scope="row" class="text-wrap"><a href="jobdetail?job_id={{ job.job_id }}">{{
-                                    job.title|truncate(50, True) if job.title is not none else 'Title unknown' }}</a>
+                                <th scope="row" class="job-history-title">
+                                    <a href="jobdetail?job_id={{ job.job_id }}">
+                                        {% set is_music = job.video_type == 'Music' or job.disctype == 'music' %}
+                                        <span class="job-cover{% if is_music %} job-cover-music{% endif %}">
+                                        {% if job.poster_url and job.poster_url not in ['None', 'N/A', 'null'] %}
+                                            <img src="{{ job.poster_url }}" alt="" loading="lazy">
+                                        {% elif is_music %}
+                                            <img src="{{ url_for('static', filename='img/music.png') }}" alt="" loading="lazy">
+                                        {% else %}
+                                            <img src="{{ url_for('static', filename='img/none.png') }}" alt="" loading="lazy">
+                                        {% endif %}
+                                        </span>
+                                        <span>{{ job.title|truncate(50, True) if job.title is not none else 'Title unknown' }}</span>
+                                    </a>
                                 </th>
-                                <td>{{ job.start_time.strftime(date_format) if job.start_time is not none }}</td>
-                                <td>{{ job.job_length }}</td>
-                                <td>{{ status_badge(job.status) }}</td>
-                                <td class="log-actions">
+                                <td data-label="Started">{{ job.start_time.strftime(date_format) if job.start_time is not none }}</td>
+                                <td data-label="Duration">{{ job.job_length }}</td>
+                                <td data-label="Status">{{ status_badge(job.status, job=job) }}</td>
+                                <td class="log-actions" data-label="Log">
                                     {% if job.logfile %}
+                                        <span class="log-action-links">
                                         <a href="logs?logfile={{ job.logfile }}&mode=full">Full</a>
                                         <a href="logs?logfile={{ job.logfile }}&mode=armcat">ARM</a>
                                         <a href="logs?logfile={{ job.logfile }}&mode=tail">Live</a>
                                         <a href="logreader?logfile={{ job.logfile }}&mode=download">Download</a>
+                                        </span>
                                     {% else %}
                                         —
                                     {% endif %}
                                 </td>
-                                <td>
+                                <td class="job-row-actions" data-label="Actions">
                                     <button type="button" class="btn btn-sm btn-primary job-actions"
                                             data-toggle="modal" data-target="#exampleModal" data-type="delete"
                                             data-jobid="{{ job.job_id }}"
@@ -122,9 +136,9 @@
                         {% for file in other_logs %}
                             <tr>
                                 <th scope="row" class="text-wrap">{{ file[0]|truncate(40, True) }}</th>
-                                <td>{{ file[2] }}</td>
-                                <td>{{ file[3] }}</td>
-                                <td class="log-actions">
+                                <td data-label="Created">{{ file[2] }}</td>
+                                <td data-label="Size">{{ file[3] }}</td>
+                                <td class="log-actions" data-label="View">
                                     <a href="logs?logfile={{ file[0] }}&mode=full">Full</a>
                                     <a href="logs?logfile={{ file[0] }}&mode=armcat">ARM</a>
                                     <a href="logs?logfile={{ file[0] }}&mode=tail">Live</a>

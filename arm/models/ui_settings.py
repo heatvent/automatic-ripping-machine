@@ -2,8 +2,12 @@ from arm.ui import db
 
 
 class UISettings(db.Model):
-    """
-    Class to hold the A.R.M ui settings
+    """Single-row table for web UI options (id=1).
+
+    index_refresh and database_limit are used. The other columns are leftovers:
+    notify_refresh used to time toast popups; use_icons, save_remote_images,
+    bootstrap_skin, and language are unused by the current theme. Keep them so
+    save_ui_settings still validates without another Alembic revision.
     """
     id = db.Column(db.Integer, autoincrement=True, primary_key=True)
     use_icons = db.Column(db.Boolean)

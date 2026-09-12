@@ -1,6 +1,7 @@
-"""
-Basic json api for access to A.R.M UI
-Also used to connect to both omdb and tmdb
+"""JSON helpers for /json AJAX (Home cards, History search/delete, job actions).
+
+Also talks to OMDb/TMDb when the UI looks up titles. Keep /json from 500ing:
+a crash here blanks every Home card until the next successful poll.
 """
 import os
 import signal
@@ -23,20 +24,12 @@ from arm.config.path_health import media_path_health
 import arm.config.config as cfg
 from arm.models.config import Config
 from arm.models.job import Job, JobState, JOB_STATUS_FINISHED
-from arm.models.notifications import Notifications
 from arm.models.track import Track
-from arm.models.ui_settings import UISettings
 from arm.ui import app, db
 from arm.ui.forms import ChangeParamsForm
 from arm.ui.utils import job_id_validator, database_updater, authenticated_state
 from arm.ui.settings import DriveUtils as drive_utils # noqa E402
-
-
-def get_notifications():
-    """Get all current notifications"""
-    all_notification = Notifications.query.filter_by(seen=False)
-    notification = [a.get_d() for a in all_notification]
-    return notification
+from arm.ui.workflow import job_workflow_status, movie_pipeline, music_pipeline
 
 
 def drive_status_payload():
@@ -56,6 +49,7 @@ def drive_status_payload():
             else:
                 tray = "closed"
             rows.append({
+                "drive_id": drive.drive_id,
                 "name": drive.name or drive.mount or "Drive",
                 "mount": drive.mount or "",
                 "tray": tray,
@@ -176,6 +170,7 @@ def get_x_jobs(job_status):
                 # treats as a real title/year/poster and fails to refresh.
                 text = "" if value in (None, "None", "null") else str(value)
                 job_results[i][str(key)] = text
+        job_results[i]["tool_status"] = job_workflow_status(j)
         if j.status == JobState.PLAYLIST_WAIT.value:
             job_results[i]["playlist_picks"] = playlist_picks_for_job(j)
         i += 1
@@ -194,6 +189,10 @@ def get_x_jobs(job_status):
     if job_status == "joblist":
         payload["path_health"] = media_path_health(cfg.arm_config)
         payload["drives"] = drive_status_payload()
+        payload["pipeline"] = {
+            "movie": movie_pipeline(cfg.arm_config),
+            "music": music_pipeline(cfg.arm_config),
+        }
     return payload
 
 
@@ -270,7 +269,7 @@ def process_makemkv_logfile(job, job_results):
         # poll for a job it does not exist yet, so `job_batch_info` is None and
         # `job_batch_info.group(1)` raises
         # "'NoneType' object has no attribute 'group'", which 500s the whole
-        # /json endpoint and leaves the Active Rips card blank. Because the
+        # /json endpoint and leaves Home cards blank. Because the
         # crash happens *before* the code that creates the BINF file, it never
         # bootstraps and stays broken for the entire rip. Guard it (and the
         # divide-by-zero when progress is still 0) and report an Unknown ETA
@@ -535,10 +534,6 @@ def delete_job(job_id, mode):
                     app.logger.debug(f"Admin requesting delete job {job_id} from database!")
                 except ValueError:
                     app.logger.debug("Admin is requesting to delete a job but didnt provide a valid job ID")
-                    notification = Notifications(f"Job: {job_id} couldn't be Deleted!",
-                                                 "Couldn't find a job with that ID")
-                    db.session.add(notification)
-                    db.session.commit()
                     return {'success': False, 'job': 'invalid', 'mode': mode, 'error': 'Not a valid job'}
                 else:
                     app.logger.debug("No errors: job_id=" + str(post_value))
@@ -546,9 +541,6 @@ def delete_job(job_id, mode):
                     Track.query.filter_by(job_id=job_id).delete()
                     Job.query.filter_by(job_id=job_id).delete()
                     Config.query.filter_by(job_id=job_id).delete()
-                    notification = Notifications(f"Job: {job_id} was Deleted!",
-                                                 f'Job with id: {job_id} was successfully deleted from the database')
-                    db.session.add(notification)
                     db.session.commit()
                     app.logger.debug(f"Admin deleting  job {job_id} was successful")
                     json_return = {'success': True, 'job': job_id, 'mode': mode}
@@ -614,24 +606,12 @@ def abandon_job(job_id):
         'job': job_id,
         'mode': 'abandon'
     }
-    job = None
     if not job_id_validator(job_id):
-        notification = Notifications(f"Job: {job_id} isn't a valid job!",
-                                     f'Job with id: {job_id} doesnt match anything in the database')
-        db.session.add(notification)
-        db.session.commit()
         return json_return
 
-    # Kill the process id
     job = Job.query.get(int(job_id))
     if job is None:
         json_return["Error"] = "Job not found"
-        notification = Notifications(
-            f"Job: {job_id} isn't a valid job!",
-            f"Job with id: {job_id} doesnt match anything in the database",
-        )
-        db.session.add(notification)
-        db.session.commit()
         return json_return
     job.status = JobState.FAILURE.value
     try:
@@ -640,17 +620,11 @@ def abandon_job(job_id):
         db.session.rollback()
         json_return["Error"] = str(err)
         json_return['success'] = False
-        title = f"Job ERROR: {job.pid} couldn't be abandoned."
-        message = json_return['Error']
-        app.logger.debug(f"{title} - Reverting db changes - {message}")
-        notification = Notifications(title, message)
-    else:
-        job.eject()  # only release/eject the job if the process got killed.
-        json_return['success'] = True
-        title = f"Job: {job.pid} was Abandoned!"
-        message = f'Job with id: {job.pid} was successfully abandoned. No files were deleted!'
-        notification = Notifications(title, message)
-    db.session.add(notification)
+        app.logger.debug("Job ERROR: %s couldn't be abandoned. Reverting db changes - %s",
+                         job.pid, json_return["Error"])
+        return json_return
+    job.eject()
+    json_return['success'] = True
     db.session.commit()
     return json_return
 
@@ -700,42 +674,10 @@ def change_job_params(config_id):
         args = {'disctype': job.disctype}
         message = f'Parameters changed. Rip Method={config.RIPMETHOD}, Main Feature={config.MAINFEATURE},' \
                   f'Minimum Length={config.MINLENGTH}, Maximum Length={config.MAXLENGTH}, Disctype={job.disctype}'
-        # We don't need to set the config as they are set with job commit
-        notification = Notifications(f"Job: {job.job_id} Config updated!", message)
-        db.session.add(notification)
         database_updater(args, job)
 
         return {'message': message, 'form': 'change_job_params', "success": True}
     return {'return': '', 'success': False}
-
-
-def read_notification(notify_id):
-    """Read notification, disable it from being show"""
-    return_json = {'success': False, 'mode': 'read_notification', 'message': ""}
-    notification = Notifications.query.filter_by(id=notify_id, seen=0).first()
-    if notification:
-        database_updater({'seen': 1, 'dismiss_time': datetime.datetime.now()}, notification)
-        return_json['success'] = True
-    else:
-        return_json['message'] = "Notification already read or not found!"
-    return return_json
-
-
-def get_notify_timeout(notify_timeout):
-    """Return the notification timeout UI setting"""
-
-    return_json = {'success': True,
-                   'mode': 'notify_timeout',
-                   'notify_timeout': ''}
-
-    armui_cfg = UISettings.query.first()
-
-    if armui_cfg:
-        return_json['notify_timeout'] = armui_cfg.notify_refresh
-    else:
-        return_json['notify_timeout'] = '6500'
-
-    return return_json
 
 
 def restart_ui():

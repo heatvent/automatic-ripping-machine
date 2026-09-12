@@ -1,3 +1,3 @@
 """
-ARM route blueprint for send_movies page
+ARM route blueprint for log pages
 """

@@ -6,10 +6,13 @@ ABCDE_FIELDS = (
     {
         "key": "CDDBMETHOD",
         "label": "Album Lookup",
+        "group": "jobs",
+        "group_title": "CD Jobs",
         "help": (
-            "Where abcde gets artist and album names.\n"
-            "Options: MusicBrainz (default, recommended), CDDB, or CD-Text.\n"
-            "MusicBrainz looks the disc up online. CD-Text reads names stored on the disc."
+            "How ARM and abcde identify the disc.\n"
+            "MusicBrainz (default): ARM names the job and abcde names the files from musicbrainz.org.\n"
+            "CDDB: abcde uses CDDB for file names; ARM still names the job from MusicBrainz.\n"
+            "CD-Text: abcde uses names stored on the disc; ARM still names the job from MusicBrainz."
         ),
         "kind": "enum",
         "choices": (
@@ -21,10 +24,12 @@ ABCDE_FIELDS = (
     {
         "key": "OUTPUTTYPE",
         "label": "Output Format",
+        "group": "output",
+        "group_title": "Output",
         "help": (
             "Encoded audio format written for each rip.\n"
-            "Common choices: flac, mp3, ogg, opus, wav, m4a.\n"
-            "Comma-separate more than one format to encode each disc several ways."
+            "FLAC is lossless. MP3 is smaller. FLAC + MP3 writes both.\n"
+            "Other comma-separated combos already in abcde.conf stay selectable."
         ),
         "kind": "enum",
         "choices": (
@@ -34,12 +39,15 @@ ABCDE_FIELDS = (
             ("opus", "Opus"),
             ("wav", "WAV"),
             ("m4a", "M4A / AAC"),
+            ("flac,mp3", "FLAC + MP3"),
         ),
         "allow_custom": True,
     },
     {
         "key": "OUTPUTDIR",
         "label": "Output Folder",
+        "group": "output",
+        "group_title": "Output",
         "help": (
             "Folder where ripped CDs are written.\n"
             "Include a trailing slash. Example: /home/arm/music/"
@@ -49,6 +57,8 @@ ABCDE_FIELDS = (
     {
         "key": "OUTPUTFORMAT",
         "label": "File Name Pattern",
+        "group": "output",
+        "group_title": "Output",
         "help": (
             "Folder and file name pattern for normal albums.\n"
             "Placeholders: ${ARTISTFILE}, ${ALBUMFILE}, ${TRACKNUM}, and ${TRACKFILE}.\n"
@@ -59,6 +69,8 @@ ABCDE_FIELDS = (
     {
         "key": "VAOUTPUTFORMAT",
         "label": "Various-Artists Pattern",
+        "group": "output",
+        "group_title": "Output",
         "help": (
             "Folder and file name pattern used for Various Artists discs.\n"
             "Uses the same placeholders as File Name Pattern."
@@ -68,6 +80,8 @@ ABCDE_FIELDS = (
     {
         "key": "PADTRACKS",
         "label": "Pad Track Numbers",
+        "group": "output",
+        "group_title": "Output",
         "help": (
             "Write track numbers with a leading zero.\n"
             "Options: Yes or No.\n"
@@ -78,6 +92,8 @@ ABCDE_FIELDS = (
     {
         "key": "INTERACTIVE",
         "label": "Ask Questions While Ripping",
+        "group": "ripping",
+        "group_title": "Ripping",
         "help": (
             "Ask questions on the console while ripping.\n"
             "Options: Yes or No.\n"
@@ -89,6 +105,8 @@ ABCDE_FIELDS = (
     {
         "key": "EJECTCD",
         "label": "Eject After Reading",
+        "group": "ripping",
+        "group_title": "Ripping",
         "help": (
             "Eject the CD after tracks have been read.\n"
             "Options: Yes or No.\n"
@@ -99,6 +117,8 @@ ABCDE_FIELDS = (
     {
         "key": "KEEPWAVS",
         "label": "Keep WAV Files",
+        "group": "ripping",
+        "group_title": "Ripping",
         "help": (
             "Keep the temporary WAV files after encoding.\n"
             "Options: Yes or No.\n"
@@ -109,6 +129,8 @@ ABCDE_FIELDS = (
     {
         "key": "MAXPROCS",
         "label": "Parallel Encoders",
+        "group": "ripping",
+        "group_title": "Ripping",
         "help": (
             "How many encode processes to run at once.\n"
             "Higher is faster on multi-core systems. Allowed range: 1 to 32."
@@ -120,6 +142,8 @@ ABCDE_FIELDS = (
     {
         "key": "ACTIONS",
         "label": "Rip Actions",
+        "group": "ripping",
+        "group_title": "Ripping",
         "help": (
             "Comma-separated abcde actions run for each CD.\n"
             "Typical set: musicbrainz,read,encode,tag,move,clean,playlist,getalbumart,embedalbumart.\n"
@@ -183,6 +207,20 @@ def abcde_fields_for_ui(conf_text):
         item["choice_values"] = [choice[0] for choice in spec.get("choices", ())]
         fields.append(item)
     return fields
+
+
+def abcde_groups_for_ui(conf_text):
+    """Group curated abcde fields for the CD Ripper tab."""
+    grouped = []
+    index = {}
+    for field in abcde_fields_for_ui(conf_text):
+        group_id = field.get("group") or "other"
+        title = field.get("group_title") or "Other"
+        if group_id not in index:
+            index[group_id] = {"id": group_id, "title": title, "fields": []}
+            grouped.append(index[group_id])
+        index[group_id]["fields"].append(field)
+    return grouped
 
 
 def apply_abcde_updates(conf_text, form_data):

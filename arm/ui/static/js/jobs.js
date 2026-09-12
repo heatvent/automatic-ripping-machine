@@ -1,6 +1,7 @@
 /*jshint esversion: 6 */
 /*global $:false */
 
+/* History page: search/filter, delete/abandon, and tablesorter. */
 let hrrref = "";
 let activeJob = null;
 let actionType = null;
@@ -30,23 +31,26 @@ function processFailedReturn(data) {
 
 function jobRowHtml(job) {
     const title = (job.title_manual && job.title_manual !== "None") ? job.title_manual : (job.title || "Title unknown");
+    const cover = (typeof jobCoverHtml === "function")
+        ? jobCoverHtml(job)
+        : "";
     const logfile = job.logfile || "";
     const logs = logfile
-        ? `<a href="logs?logfile=${logfile}&mode=full">Full</a>
+        ? `<span class="log-action-links"><a href="logs?logfile=${logfile}&mode=full">Full</a>
            <a href="logs?logfile=${logfile}&mode=armcat">ARM</a>
            <a href="logs?logfile=${logfile}&mode=tail">Live</a>
-           <a href="logreader?logfile=${logfile}&mode=download">Download</a>`
+           <a href="logreader?logfile=${logfile}&mode=download">Download</a></span>`
         : "—";
     const badge = (typeof statusBadgeHtml === "function")
-        ? statusBadgeHtml("status" + job.job_id, job.status)
+        ? statusBadgeHtml("status" + job.job_id, job.status, job)
         : (job.status || "");
     return `<tr id="job-row-${job.job_id}">
-        <th scope="row" class="text-wrap"><a href="jobdetail?job_id=${job.job_id}">${title}</a></th>
-        <td>${job.start_time || ""}</td>
-        <td>${job.job_length || ""}</td>
-        <td>${badge}</td>
-        <td class="log-actions">${logs}</td>
-        <td><button type="button" class="btn btn-sm btn-primary job-actions" data-toggle="modal"
+        <th scope="row" class="job-history-title"><a href="jobdetail?job_id=${job.job_id}">${cover}<span>${title}</span></a></th>
+        <td data-label="Started">${job.start_time || ""}</td>
+        <td data-label="Duration">${job.job_length || ""}</td>
+        <td data-label="Status">${badge}</td>
+        <td class="log-actions" data-label="Log">${logs}</td>
+        <td class="job-row-actions" data-label="Actions"><button type="button" class="btn btn-sm btn-primary job-actions" data-toggle="modal"
             data-target="#exampleModal" data-type="delete" data-jobid="${job.job_id}"
             data-href="json?job=${job.job_id}&mode=delete">Delete</button></td>
     </tr>`;

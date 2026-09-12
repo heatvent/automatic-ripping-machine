@@ -22,12 +22,15 @@
 <div class="invalid-feedback d-block setting-error" id="err-{{ key }}" hidden></div>
 {% endmacro %}
 
-{% macro yaml_settings_form(form_id, groups, submit_label, read_only, id_prefix) %}
+{% macro yaml_settings_form(form_id, groups, submit_label, read_only, id_prefix, show_submit=True) %}
 <form id="{{ form_id }}" name="{{ form_id }}" method="post" action="" novalidate>
     {{ form.hidden_tag() }}
     {% for group_id, group_title, group_keys in groups %}
     <section class="settings-section" id="{{ id_prefix }}-{{ group_id }}">
         <h5>{{ group_title }}</h5>
+        {% if setting_group_intros is defined and setting_group_intros.get(group_id) %}
+        <p class="settings-section-note">{{ setting_group_intros.get(group_id) }}</p>
+        {% endif %}
         {% for k in group_keys %}
             {% set v = settings[k] %}
             <div class="setting-block">
@@ -77,8 +80,10 @@
         {% endfor %}
     </section>
     {% endfor %}
+    {% if show_submit %}
     <button class="btn btn-secondary btn-lg btn-block settings-save" form="{{ form_id }}"
             type="submit"{% if read_only %} disabled{% endif %}>{{ submit_label }}
     </button>
+    {% endif %}
 </form>
 {% endmacro %}

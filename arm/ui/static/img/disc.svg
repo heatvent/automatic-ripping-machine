@@ -1,15 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
     <defs>
-        <radialGradient id="armDiscGold" cx="36%" cy="30%" r="72%">
-            <stop offset="0%" stop-color="#f3d07a"/>
-            <stop offset="42%" stop-color="#e0b04a"/>
-            <stop offset="100%" stop-color="#8a6a28"/>
+        <radialGradient id="armDiscBlue" cx="36%" cy="30%" r="72%">
+            <stop offset="0%" stop-color="#8eb4d4"/>
+            <stop offset="42%" stop-color="#446e9b"/>
+            <stop offset="100%" stop-color="#2a4a6e"/>
         </radialGradient>
     </defs>
-    <circle cx="16" cy="16" r="14.6" fill="url(#armDiscGold)"/>
+    <circle cx="16" cy="16" r="14.6" fill="url(#armDiscBlue)"/>
     <circle cx="16" cy="16" r="11.2" fill="none" stroke="#121212" stroke-opacity="0.16" stroke-width="0.7"/>
-    <circle cx="16" cy="16" r="8.1" fill="none" stroke="#f7e7b8" stroke-opacity="0.4" stroke-width="0.8"/>
+    <circle cx="16" cy="16" r="8.1" fill="none" stroke="#c5d4e8" stroke-opacity="0.4" stroke-width="0.8"/>
     <circle cx="16" cy="16" r="5.4" fill="none" stroke="#121212" stroke-opacity="0.2" stroke-width="0.7"/>
-    <circle cx="16" cy="16" r="3.35" fill="#1a1a1a" stroke="#c49a3c" stroke-width="1.15"/>
-    <circle cx="16" cy="16" r="1.2" fill="#e0b04a"/>
+    <circle cx="16" cy="16" r="3.35" fill="#1a1a1a" stroke="#6b93b8" stroke-width="1.15"/>
+    <circle cx="16" cy="16" r="1.2" fill="#446e9b"/>
 </svg>
