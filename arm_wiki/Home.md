@@ -2,52 +2,33 @@
 
 This **heatvent-2x** tree is a fork of [Automatic Ripping Machine](https://github.com/automatic-ripping-machine/automatic-ripping-machine). Insert an optical disc (Blu-ray, DVD, CD) and ARM checks whether it's audio, video (Movie or TV), or data, then rips it.
 
-See the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) for how this fork differs and how to install it. Upstream origin story: https://b3n.org/automatic-ripping-machine
+See the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) for how this fork differs and how to install it. Original project origin story: https://b3n.org/automatic-ripping-machine
 
 
-## Supported Operating Systems
+## Supported install
 
-ARM on this fork is intended to run as a [Docker image built from source](Docker.md). Native install scripts still exist but are not the supported path. 
+ARM on this fork runs as a **Docker image built from this source**. There is no Docker Hub image. Native Ubuntu/Debian install scripts from the original project are not supported here.
 
-### Docker image
-
-Due to the nature of Docker, the container can run on any platform that supports Docker. See [Docker.md](Docker.md). Build this fork from source; do not pull the upstream Hub image if you want these changes.
-
-### Native installation
-
-This is a small project with few maintainers. As such we do not have the time to support a large number of distributions, and systems are chosen for support by most common use. We officially support the following operating systems:
-| Operating System | Versions     |
-|------------------|--------------|
-| Ubuntu Desktop   | 20.04 |
-
-> [!WARNING]
-> Please keep in mind that the regular support of Ubuntu 20.04 is end-of-life in April 2025. Due to this we ***highly*** recommend running a Docker container instead and a native installation is discouraged.
-> Ubuntu 24.02 has had initial testing.
-
-Please note that if you open an issue to ask for help, if the OS you are using is not on this list you will be asked to reimage and try again or your issue will be closed.
-
-If you use an unsupported operating system and can't or don't want to reimage, that's okay! Please try our Docker image instead.
+Due to the nature of Docker, the container can run on any Linux host that supports Docker (snap Docker is not supported). See [Docker.md](Docker.md) and the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md).
 
 
 ## Get Started
-[Getting Started](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Getting-Started) on your journey with ARM
+
+[Getting Started](Getting-Started.md)
 
 ## Current Features
 
 - Detects insertion of disc using udev
 - Determines disc type...
   - If video (Blu-ray or DVD)
-    - Retrieve title from disc or OMdb API to name the folder "movie title (year)" so that Plex or Emby can pick it up
-    - Determine if video is Movie or TV using OMDb API
-    - Rip using MakeMKV or HandBrake (can rip all features or main feature)
-    - Eject disc and queue up Handbrake transcoding when done
+    - Retrieve title from disc or OMDb/TMDb API to name the folder "movie title (year)" so that Plex or Emby can pick it up
+    - Determine if video is Movie or TV using OMDb or TMDb
+    - Rip using MakeMKV, then optionally HandBrake or FFmpeg
+    - Eject disc and queue transcoding when done
     - Transcoding jobs are asynchronously batched from ripping
-    - Send notifications on updates via IFTTT, Pushbullet, Pushover, Discord, Slack, Telegram and many more!
-  - If audio (CD) - rip using abcde  (get discdata and album art from musicbrainz)
+    - Send notifications on updates via Apprise and others
+  - If audio (CD) - rip using abcde (album lookup from MusicBrainz, CDDB, or CD-Text)
   - If data (Blu-Ray, DVD, or CD) - make an ISO backup
 - Headless, designed to be run from a server
-- Ripping from multiple-optical drives in parallel
-- HTML UI to interact with ripping jobs, view logs, etc
-- Intel QuickSync support
-- NVIDIA NVENC support
-- AMD VCE support
+- Ripping from multiple optical drives in parallel
+- HTML UI to interact with ripping jobs, view logs, and settings

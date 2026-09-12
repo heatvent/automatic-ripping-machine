@@ -1,16 +1,5 @@
-## Overview
+# Setup
 
-There are various ways to setup ARM, the simplest would be to use the scripts inside the scrips folder. However these are not perfect and can sometimes fail.
-The best way to setup ARM for a new user is to follow along from here [Debian](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Setting-up-ARM-manually-(Debian-OMV)) or [Ubuntu](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Setting-up-ARM-manually-(Ubuntu))
+This fork is installed as a **Docker image built from source**. There is no Docker Hub image, and native Ubuntu/Debian install scripts from the original project are not supported here.
 
-## Install Script For OpenMediaVault/Debian/Ubuntu 20, 22.04 24.02(Alpha)
-
-**For the attended install use:**
- ```
- sudo apt install wget
- wget https://raw.githubusercontent.com/automatic-ripping-machine/automatic-ripping-machine/main/scripts/installers/DebianInstaller.sh
- sudo chmod +x DebianInstaller.sh
- sudo ./DebianInstaller.sh
- ```
-
-Then ```reboot```  to complete installation.
+Follow the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) or [Docker.md](Docker.md).

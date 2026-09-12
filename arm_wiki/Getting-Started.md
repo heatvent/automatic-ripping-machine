@@ -1,23 +1,19 @@
 ## Contents
 
-This tree is the **heatvent-2x** fork. Install from the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) or [Docker.md](Docker.md). The hardware notes below still apply. Links to the upstream wiki describe the original project and its Docker Hub image.
+This tree is the **heatvent-2x** fork. Install from the [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md) or [Docker.md](Docker.md). Docker built from this source is the only supported path. The hardware notes below still apply.
 
 1. [Hardware Requirements](#hardware-requirements)
 2. [Installation](#installation)
-3. [Docker Setup](#docker-setup)
-4. [Virtual Machine Setup](#virtual-machine-setup)
-5. [ARM Configuration](#arm-configuration)
-6. [Additional Hardware Setup](#additional-hardware-setup)
+3. [Virtual Machine Setup](#virtual-machine-setup)
+4. [ARM Configuration](#arm-configuration)
+5. [Additional Hardware Setup](#additional-hardware-setup)
 
 ## Hardware Requirements
 
 Operation of ARM does not require much in the way of system requirements, although it goes with out saying that a faster processor and more memory will rip media much faster. System storage is an important requirement to pay attention to, otherwise jobs will fail whilst processing if storage reaches 100%.
 - Host OS:
-   - Debian 10 (buster) ***ongoing support dropped end of 2022***
-   - Open Media Vault (5.x) ***ongoing support dropped end of 2022***
-   - Ubuntu Server 18.04 - Needs Multiverse and Universe repositories ***ongoing support dropped end of 2022***
-   - Ubuntu 20.04 - Needs Multiverse and Universe repositories
-   - **Might work with other Linux distros but this isn't tested
+   - Linux that can run Docker (snap Docker is not supported)
+   - Native Ubuntu/Debian installs from the original project are not supported on this fork
 - Hardware:
    - The below are the minimum requirements to support handbrake transcoding of video files, one of the most intensive part of ARM - [Handbrake requirements](https://handbrake.fr/docs/en/latest/technical/system-requirements.html).
    - Processor:
@@ -41,14 +37,13 @@ Operation of ARM does not require much in the way of system requirements, althou
 
 ## Installation
 
-ARM can be installed in multiple ways:
-- Docker install on a bare metal server/PC
-- Docker install in a VM, on a bare metal server/PC
-- On a bare metal server/PC ***Note not prefered option***
+Build and run the Docker image from this repository:
 
-### Docker Setup
+- Bare-metal Linux host: [Docker.md](Docker.md)
+- From a local clone / Dockerfile: [Docker-From-Source.md](Docker-From-Source.md)
+- Short path: [README](https://github.com/heatvent/automatic-ripping-machine/blob/heatvent-2x/README.md)
 
-This fork has no Docker Hub image. Build from source: [Docker.md](Docker.md) or [Docker-From-Source.md](Docker-From-Source.md).
+There is no Docker Hub image for this fork. Native “bare metal” scripts from the original project are not supported here.
 
 ### Virtual Machine Setup
 
@@ -152,7 +147,7 @@ lsscsi
 
 ## ARM Configuration
 
-Once setup, ARM operates will operate with no changes to the default configuration. However, to get the most of ARM review the configuration files and modify to suit the media being ripped. See ARM [Configuration](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Configuring-ARM) for more information.
+Once setup, ARM operates with no changes to the default configuration. To get the most of ARM, review the configuration files and modify them to suit the media being ripped. See [Configuration](Configuring-ARM.md).
 
 
 ## Additional Hardware Setup
@@ -160,8 +155,8 @@ Once setup, ARM operates will operate with no changes to the default configurati
 Ripping media with additional hardware configuration allows for faster transcoding and depending on the host system, should improve ripping times.
 Supported Hardware Acceleration:
 - Optional extras. None of these are required for ARM to run.
-  - For [Intel QuickSync Video support](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/intel-qsv) you need 6th Gen CPU (Skylake) or newer with QuickSync feature set
-  - For [AMD VCE support](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/amd-vce) you need RX400, 500, Vega/II, Navi series GPU or better
-  - For [NVIDIA NVENC support](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/nvidia) you need GeForce GTX Pascal (1050+) and RTX Turing (1650+, 2060+) series GPU or better
+  - For [Intel QuickSync Video support](Hardware-Transcode-Intel-QSV.md) you need 6th Gen CPU (Skylake) or newer with QuickSync feature set
+  - For [AMD VCE support](Hardware-Transcode-AMD-VCE.md) you need RX400, 500, Vega/II, Navi series GPU or better
+  - For [NVIDIA NVENC support](Hardware-Transcode-Nvidia-NVENC.md) you need GeForce GTX Pascal (1050+) and RTX Turing (1650+, 2060+) series GPU or better
 
 **A small warning, using Intel QuickSync/AMD VCE/NVIDIA NVENC will decrease video quality, but it increases the speed of encoding significantly!**

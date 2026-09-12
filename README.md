@@ -55,9 +55,9 @@ This is not the Docker Hub `automaticrippingmachine/automatic-ripping-machine` i
 - One or more optical drives
 - Enough disk space for rips (a NAS is typical)
 
-## Install (Docker, from this source)
+## Install
 
-This fork is meant to be **built locally**. Native Ubuntu install scripts still exist under `scripts/installers/` but Docker is the supported path.
+**Docker built from this repository is the only supported install.** There is no Docker Hub image for this fork, and native Ubuntu/Debian scripts from the original project are not supported here.
 
 ### 1. Host prep
 
@@ -134,11 +134,13 @@ docker stop ARM   # or whatever --name you used
 
 Do not `docker pull automaticrippingmachine/automatic-ripping-machine` expecting these changes.
 
-More detail: [arm_wiki/Docker.md](arm_wiki/Docker.md) and [arm_wiki/Docker-From-Source.md](arm_wiki/Docker-From-Source.md). Upstream wiki pages still describe the original project and Docker Hub image.
+More detail: [arm_wiki/Docker.md](arm_wiki/Docker.md), [arm_wiki/Docker-From-Source.md](arm_wiki/Docker-From-Source.md), and [arm_wiki/Getting-Started.md](arm_wiki/Getting-Started.md).
 
 ## Troubleshooting
 
-Start with [arm_wiki/General-Troubleshooting.md](arm_wiki/General-Troubleshooting.md) and [arm_wiki/Docker-Troubleshooting.md](arm_wiki/Docker-Troubleshooting.md). Upstream: [wiki](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki) and [Discord](https://discord.gg/FUSrn8jUcR).
+Start with [arm_wiki/General-Troubleshooting.md](arm_wiki/General-Troubleshooting.md) and [arm_wiki/Docker-Troubleshooting.md](arm_wiki/Docker-Troubleshooting.md). Open issues on this repository: [heatvent/automatic-ripping-machine](https://github.com/heatvent/automatic-ripping-machine/issues).
+
+The original project’s wiki and Discord describe the Docker Hub image, not this fork.
 
 ## Contributing
 

@@ -166,7 +166,7 @@ Each volume specified in the default script is needed by A.R.M. The following is
     * It is strongly recommended that this volume has access to a large amount of fast (SSD) disk space.
     * The default suggested location is `/home/arm/media` for the "{Path_Outside_Of_Docker_Container}" of the volume definition.
 * `/etc/arm/config`
-    * This is where A.R.M. will look for the configuration files `arm.yaml`, `apprise.yaml` and `abcde.conf`. If the files are present it will use them, if they are not present A.R.M. will copy fresh copies with all the defaults and use those.  You can edit these files manually here or you can edit them in the A.R.M. web interface by clicking on the "Arm Settings" button on the toolbar.
+    * This is where A.R.M. will look for the configuration files `arm.yaml`, `apprise.yaml` and `abcde.conf`. If the files are present it will use them, if they are not present A.R.M. will copy fresh copies with all the defaults and use those. You can edit these files here or in **Settings**.
     * The default suggested location is `/home/arm/config` for the "{Path_Outside_Of_Docker_Container}" of the volume definition.
  
 ### An Important note about permissions.
@@ -194,4 +194,4 @@ If using network shares, be aware that the performance of your A.R.M. installati
 *    `{media_volume_local_path}` is a location on the local machine running on Fast SSD and plenty of space (20+ gigabytes for each concurrent Dual Layer DVDs or 100 gigabytes for each concurrent 4k blu-rays)
 *    `{media_volume_local_path}/completed` is a mounted network share (for example, pointing to a Plex, Emby or Jellyfin media library folder)
 
-If using a network share for the `/home/arm` volume, read this [section](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Docker-Troubleshooting#my-volume-paths-point-to-a-cifs-mount---but-now-the-database-is-locked) from [Docker Troubleshooting](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Docker-Troubleshooting) 
+If using a network share for the `/home/arm` volume, read this [section](Docker-Troubleshooting.md#my-volume-paths-point-to-a-cifs-mount---but-now-the-database-is-locked) from [Docker Troubleshooting](Docker-Troubleshooting.md) 

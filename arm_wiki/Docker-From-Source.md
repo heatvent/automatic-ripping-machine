@@ -88,4 +88,4 @@ You should pass in
 This isn't required, arm will still work, but it will not perform as well as it can.
 
 ### Troubleshooting
-Please see the [docker troubleshooting page](https://github.com/automatic-ripping-machine/automatic-ripping-machine/wiki/Docker-Troubleshooting)
+Please see the [docker troubleshooting page](Docker-Troubleshooting.md)
